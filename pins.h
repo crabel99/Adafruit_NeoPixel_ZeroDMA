@@ -335,6 +335,11 @@ struct {
   &sercom1, SERCOM1, SERCOM1_DMAC_ID_TX, MOSI, SPI_PAD_0_SCK_1, PIO_SERCOM,
 #endif // end Arduino NANO 33 IoT
 
+#if defined(ADAFRUIT_PIXELTRINKEY_M0)
+  &sercom0, SERCOM0, SERCOM0_DMAC_ID_TX, PIN_DATA, SPI_PAD_0_SCK_1, PIO_SERCOM_ALT,
+#endif
+
+
 }; // end sercomTable[]
 
 #define N_SERCOMS (sizeof sercomTable / sizeof sercomTable[0])
