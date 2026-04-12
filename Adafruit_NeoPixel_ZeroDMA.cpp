@@ -51,7 +51,8 @@ Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p,
     Will require stopping DMA, reallocating, restarting DMA.  Fun times.
 */
 Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA(void)
-    : Adafruit_NeoPixel(), brightness(256), dmaBuf(NULL), spi(NULL) {}
+    : Adafruit_NeoPixel(), spi(NULL), dmaBuf(NULL), brightness(256),
+      _useAltSercom(false) {}
 
 Adafruit_NeoPixel_ZeroDMA::~Adafruit_NeoPixel_ZeroDMA() {
   dma.abort();
