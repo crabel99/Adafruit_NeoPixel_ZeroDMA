@@ -46,9 +46,13 @@ Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p,
                                                      neoPixelType t)
     : Adafruit_NeoPixel(n, p, t), brightness(256), dmaBuf(NULL), spi(NULL) {}
 
-/** @brief Create a NOT FINISHED object -- need setPin(), updateLength(),
-    updateType() for this.
-    Will require stopping DMA, reallocating, restarting DMA.  Fun times.
+/** @brief Default constructor exists for API compatibility, but this object
+  still assumes fixed pin/length/type once DMA is initialized.
+
+  Inherited dynamic APIs (setPin/updateLength/updateType) exist in the base
+  class, but this class does not implement a full stop/reallocate/restart DMA
+  lifecycle around those changes. Using that workflow after begin() is not
+  considered a supported path.
 */
 Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA(void)
     : Adafruit_NeoPixel(), spi(NULL), dmaBuf(NULL), brightness(256),
