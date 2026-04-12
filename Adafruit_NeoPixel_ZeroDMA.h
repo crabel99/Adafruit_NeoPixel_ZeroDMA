@@ -17,8 +17,10 @@ typedef SPIClass SPIClassSAMD;
 class Adafruit_NeoPixel_ZeroDMA : public Adafruit_NeoPixel {
 
 public:
-  Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p = 6,
-                            neoPixelType t = NEO_GRB);
+  Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p = 6, neoPixelType t = NEO_GRB,
+                            bool altSercom = false);
+  // Uses NeoPixel default color order (NEO_GRB).
+  Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p, bool altSercom);
   Adafruit_NeoPixel_ZeroDMA(void);
   ~Adafruit_NeoPixel_ZeroDMA();
 
