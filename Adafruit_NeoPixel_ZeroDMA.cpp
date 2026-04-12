@@ -46,7 +46,7 @@ Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p,
                                                      neoPixelType t)
     : Adafruit_NeoPixel(n, p, t), brightness(256), dmaBuf(NULL), spi(NULL) {}
 
-/** @brief Create a NOT FINISHED onject -- need setPin(), updateLength(),
+/** @brief Create a NOT FINISHED object -- need setPin(), updateLength(),
     updateType() for this.
     Will require stopping DMA, reallocating, restarting DMA.  Fun times.
 */
