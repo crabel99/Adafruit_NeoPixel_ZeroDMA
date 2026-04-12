@@ -71,6 +71,70 @@ Adafruit_NeoPixel_ZeroDMA::~Adafruit_NeoPixel_ZeroDMA() {
     free(dmaBuf);
 }
 
+/** @brief Discover the SERCOM configuration for the Arduino pin stored in
+    @p pin by querying the board's variant table (g_APinDescription) and a
+  compile-time silicon mux table generated from parsed datasheet mux tables.
+
+    Two-pass lookup honours @p _useAltSercom: pass 0 tries the preferred mux
+    variant (MUX D when altSercom=true, MUX C otherwise); pass 1 accepts the
+    other as a fallback.  Only pads valid as SPI MOSI (PAD 0, 2, or 3) are
+    considered — PAD 1 is clock-only.
+
+    @returns true and populates all out-parameters on success.
+*/
+bool Adafruit_NeoPixel_ZeroDMA::_setupSercomFromPin(SERCOM **outSercom,
+                                                    Sercom **outSercomBase,
+                                                    uint8_t *outDmacID,
+                                                    SercomSpiTXPad *outPadTX,
+                                                    EPioType *outPinFunc) {
+  if ((uint32_t)pin >= PINS_COUNT)
+    return false;
+
+  const uint8_t ulPort = (uint8_t)g_APinDescription[pin].ulPort;
+  const uint8_t ulPin = (uint8_t)g_APinDescription[pin].ulPin;
+  const uint8_t nSercoms = (uint8_t)(sizeof(_sercoms) / sizeof(_sercoms[0]));
+  const size_t tableSize = sizeof(_sercomPinTable) / sizeof(_sercomPinTable[0]);
+
+  // preferredMux: 2 = MUX C / PIO_SERCOM,  3 = MUX D / PIO_SERCOM_ALT
+  const uint8_t preferredMux = _useAltSercom ? 3u : 2u;
+  const uint8_t fallbackMux = _useAltSercom ? 2u : 3u;
+
+  for (int pass = 0; pass < 2; pass++) {
+    const uint8_t targetMux = (pass == 0) ? preferredMux : fallbackMux;
+    for (size_t i = 0; i < tableSize; i++) {
+      const _SercomPinLookup &e = _sercomPinTable[i];
+      if (e.port != ulPort || e.portPin != ulPin || e.mux != targetMux)
+        continue;
+      if (e.sercomNum >= nSercoms)
+        continue; // SERCOM absent on this chip variant
+
+      // PAD1 is clock-only and cannot serve as MOSI.
+      SercomSpiTXPad padTX;
+      switch (e.pad) {
+      case 0:
+        padTX = SPI_PAD_0_SCK_1;
+        break;
+      case 2:
+        padTX = SPI_PAD_2_SCK_3;
+        break;
+      case 3:
+        padTX = SPI_PAD_3_SCK_1;
+        break;
+      default:
+        continue;
+      }
+
+      *outSercom = _sercoms[e.sercomNum];
+      *outSercomBase = _sercomBases[e.sercomNum];
+      *outDmacID = _sercomDmacId[e.sercomNum];
+      *outPadTX = padTX;
+      *outPinFunc = (EPioType)e.mux;
+      return true;
+    }
+  }
+  return false;
+}
+
 /** @brief Initialize the underlying SPI SERCOM for DMA transfers
     @param sercom Pointer to the underlying SERCOM from the Arduino core
     @param sercomBase the 'raw' Sercom register base address
