@@ -147,21 +147,11 @@ bool Adafruit_NeoPixel_ZeroDMA::begin(SERCOM *sercom, Sercom *sercomBase,
 #endif
     // If NeoPixel pin is not an existing SPI SERCOM, allocate a new one.
     if (spi == NULL) {
-      // DIRTY POOL! The SPIClass constructor expects MISO, SCK and MOSI
-      // pins, in that order. Our library only intends to ever use the MOSI
-      // output, the others are never even set to SERCOM periph functions.
-      // We just give the SPI constructor THE SAME PIN NUMBER for all three.
-      // The SPI lib never checks if they're distinct and valid for each of
-      // the three. It does set pinPeripheral for each (or in this case,
-      // the same for the MOSI pin three times)...but no matter, we set our
-      // own pinPeripheral below. The SPI RX PAD also doesn't matter...we
-      // always claim it's PAD 1 here, because (by hardware design) the TX
-      // pad will always be 0, 2 or 3...this might collide with the SCK PAD
-      // value, but we don't care, neither SCK nor MISO is actually used.
-      // (This is tested across many SAMD devices and works, but it's
-      // conceivable that this could fail spectacularly on some unforseen
-      // future device, if the SERCOM pad assignment becomes hardwarily
-      // strict.)
+      // SPIClassSAMD expects MISO, SCK, and MOSI pins plus an RX PAD.
+      // We only use MOSI for NeoPixel output, so we pass the same pin for
+      // all three roles and keep RX on PAD1. The constructor may touch
+      // pin muxing, but we immediately apply the exact mux selected by our
+      // datasheet-derived lookup via pinPeripheral(mosi, pinFunc) below.
       spi = new SPIClassSAMD(sercom, mosi, mosi, mosi, padTX, SERCOM_RX_PAD_1);
     }
     if ((spi)) {
