@@ -229,7 +229,7 @@ bool Adafruit_NeoPixel_ZeroDMA::begin(SERCOM *sercom, Sercom *sercomBase,
   return false;
 }
 
-#ifdef __SAMD51__
+#if defined(__SAMD51__) || defined(__SAME51__) || defined(__SAME53__) || defined(__SAME54__)
 // See notes below about M4 tomfoolery
 #define EXTRASTARTBYTES 24 // Empty bytes issued until DMA timing solidifies
 #define LATCHTIME 300      // Time, in microseconds, for end-of-data latch
@@ -354,7 +354,7 @@ bool Adafruit_NeoPixel_ZeroDMA::begin(void) {
 /** @brief Convert the NeoPixel buffer to larger DMA buffer and start xfer
  */
 void Adafruit_NeoPixel_ZeroDMA::show(void) {
-#ifdef __SAMD51__
+#if defined(__SAMD51__) || defined(__SAME51__) || defined(__SAME53__) || defined(__SAME54__)
   if (!toggleMask) { // Using normal SERCOM DMA technique?
 #endif
 
@@ -419,7 +419,7 @@ void Adafruit_NeoPixel_ZeroDMA::show(void) {
       ;
     dma.trigger();
   }
-#endif
+#endif // __SAMD51__ || __SAME51__ || __SAME53__ || __SAME54__
 }
 
 /** @brief
