@@ -23,10 +23,10 @@
 Adafruit_NeoPixel_ZeroDMA strip(NUM_PIXELS, PIN, NEO_GRB);
 
 void setup() {
-  if (!strip.begin()) {
-    while (1) {
-    }
-  }
+  if (!strip.begin())
+    while (1)
+      ;
+
   strip.setBrightness(32);
   strip.show();
 }
