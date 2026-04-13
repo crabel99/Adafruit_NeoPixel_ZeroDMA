@@ -42,6 +42,15 @@ and pins for each).
     @param n Number of pixels
     @param p Pin to use (we will figure out what Sercom to use)
     @param t The color order / type of pixels
+*/
+Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p,
+                                                     neoPixelType t)
+    : Adafruit_NeoPixel_ZeroDMA(n, p, t, false) {}
+
+/** @brief Initialize a NeoPixel strand
+    @param n Number of pixels
+    @param p Pin to use (we will figure out what Sercom to use)
+    @param t The color order / type of pixels
     @param altSercom If true, prefer ALT SERCOM variant; if false (default),
    prefer primary
 */
@@ -50,17 +59,6 @@ Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p,
                                                      bool altSercom)
     : Adafruit_NeoPixel(n, p, t), spi(NULL), dmaBuf(NULL), brightness(256),
       _useAltSercom(altSercom) {}
-
-/** @brief Initialize a NeoPixel strand with simple parameters (GRB default)
-    @param n Number of pixels
-    @param p Pin to use
-    @param altSercom If true, prefer ALT SERCOM variant; if false, prefer
-   primary
-*/
-Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p,
-                                                     bool altSercom)
-    : Adafruit_NeoPixel(n, p, NEO_GRB), spi(NULL), dmaBuf(NULL),
-      brightness(256), _useAltSercom(altSercom) {}
 
 /** @brief Default constructor exists for API compatibility, but this object
   still assumes fixed pin/length/type once DMA is initialized.
