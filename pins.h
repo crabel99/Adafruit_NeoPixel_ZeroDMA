@@ -3,12 +3,16 @@
 #include "variant.h"
 #include <stdint.h>
 
+/**
+ * @brief One SPI-capable SERCOM route for a specific MCU port pin.
+ */
 struct _SercomPinLookup {
-  uint8_t port;      // EPortType value: 0=PORTA, 1=PORTB, 2=PORTC, 3=PORTD
-  uint8_t portPin;   // pin within port (0-31)
-  uint8_t sercomNum; // SERCOM instance index
-  uint8_t pad;       // SERCOM pad (0-3)
-  uint8_t mux;       // 2=PIO_SERCOM (MUX C), 3=PIO_SERCOM_ALT (MUX D)
+  uint8_t port;      ///< EPortType index: 0=PORTA, 1=PORTB, 2=PORTC, 3=PORTD.
+  uint8_t portPin;   ///< Pin index within the selected port (0-31).
+  uint8_t sercomNum; ///< SERCOM instance index.
+  uint8_t pad;       ///< SERCOM pad number (0-3).
+  uint8_t mux; ///< Pin mux selector: 2=PIO_SERCOM (MUX C), 3=PIO_SERCOM_ALT
+               ///< (MUX D).
 };
 
 static const _SercomPinLookup _sercomPinTable[] = {

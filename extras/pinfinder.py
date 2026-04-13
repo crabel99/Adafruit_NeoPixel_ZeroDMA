@@ -186,7 +186,11 @@ def format_series_macro(series_name: str, checks: List[str]) -> List[str]:
         return lines
 
     expr = " || ".join(f"defined({check})" for check in sorted(set(checks)))
-    lines.append(f"#define {series_name} ({expr})")
+    lines.append(f"#if {expr}")
+    lines.append(f"#define {series_name} 1")
+    lines.append("#else")
+    lines.append(f"#define {series_name} 0")
+    lines.append("#endif")
     lines.append("#endif")
     return lines
 
