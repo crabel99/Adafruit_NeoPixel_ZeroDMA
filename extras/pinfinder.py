@@ -58,7 +58,13 @@ def _strip_at_prefix(device: str) -> str:
 
 
 def macro_candidates(device: str) -> List[str]:
-    return [f"__{_strip_at_prefix(device)}__"]
+    dev = _strip_at_prefix(device)
+    # The D5x/E5x feature tables omit the silicon-revision suffix, but the
+    # CMSIS chip guards retain it. Keep package-specific guards so smaller
+    # packages never enable routes that only exist on larger chips.
+    if re.fullmatch(r"(?:SAMD51|SAME5[134])[GJNP]\d{2}", dev):
+        dev += "A"
+    return [f"__{dev}__"]
 
 
 def load_csv(path: Path, skip_rows: int = 0) -> List[Dict[str, str]]:
