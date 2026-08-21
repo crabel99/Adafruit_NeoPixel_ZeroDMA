@@ -12,6 +12,12 @@
 typedef SPIClass SPIClassSAMD;
 #endif
 
+#if defined(SERCOM0_REGS)
+typedef sercom_registers_t AdafruitNeoPixelZeroDmaSercom;
+#else
+typedef Sercom AdafruitNeoPixelZeroDmaSercom;
+#endif
+
 /** @brief Create a NeoPixel class that uses SPI DMA to write strands in
     a non-blocking manner */
 class Adafruit_NeoPixel_ZeroDMA : public Adafruit_NeoPixel {
@@ -28,8 +34,9 @@ public:
   bool begin(void);
   // Although esoteric, there IS a use case for keeping this overloaded
   // begin() variant public, please DO NOT move to the protected section.
-  bool begin(SERCOM *sercom, Sercom *sercomBase, uint8_t dmacID, uint8_t mosi,
-             SercomSpiTXPad padTX, EPioType pinFunc);
+  bool begin(SERCOM *sercom, AdafruitNeoPixelZeroDmaSercom *sercomBase,
+             uint8_t dmacID, uint8_t mosi, SercomSpiTXPad padTX,
+             EPioType pinFunc);
   void show();
   void setBrightness(uint8_t);
   uint8_t getBrightness() const;
@@ -47,7 +54,8 @@ protected:
 
 private:
   bool _useAltSercom; ///< Prefer ALT SERCOM variant if available
-  bool _setupSercomFromPin(SERCOM **outSercom, Sercom **outSercomBase,
+  bool _setupSercomFromPin(SERCOM **outSercom,
+                           AdafruitNeoPixelZeroDmaSercom **outSercomBase,
                            uint8_t *outDmacID, SercomSpiTXPad *outPadTX,
                            EPioType *outPinFunc);
 };

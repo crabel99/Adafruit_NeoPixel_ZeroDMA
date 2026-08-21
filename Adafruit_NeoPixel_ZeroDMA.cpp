@@ -97,7 +97,7 @@ Adafruit_NeoPixel_ZeroDMA::~Adafruit_NeoPixel_ZeroDMA() {
     @returns true and populates all out-parameters on success.
 */
 bool Adafruit_NeoPixel_ZeroDMA::_setupSercomFromPin(SERCOM **outSercom,
-                                                    Sercom **outSercomBase,
+                                                    AdafruitNeoPixelZeroDmaSercom **outSercomBase,
                                                     uint8_t *outDmacID,
                                                     SercomSpiTXPad *outPadTX,
                                                     EPioType *outPinFunc) {
@@ -158,7 +158,8 @@ bool Adafruit_NeoPixel_ZeroDMA::_setupSercomFromPin(SERCOM **outSercom,
     @param pinFunc The pinmux setup for which 'type' of pinmux we use
     @returns True or false on success
 */
-bool Adafruit_NeoPixel_ZeroDMA::begin(SERCOM *sercom, Sercom *sercomBase,
+bool Adafruit_NeoPixel_ZeroDMA::begin(SERCOM *sercom,
+                                      AdafruitNeoPixelZeroDmaSercom *sercomBase,
                                       uint8_t dmacID, uint8_t mosi,
                                       SercomSpiTXPad padTX, EPioType pinFunc) {
 
@@ -238,8 +239,13 @@ bool Adafruit_NeoPixel_ZeroDMA::begin(SERCOM *sercom, Sercom *sercomBase,
       dma.setTrigger(dmacID);
       dma.setAction(DMA_TRIGGER_ACTON_BEAT);
       if (DMA_STATUS_OK == dma.allocate()) {
+#if defined(SERCOM0_REGS)
+        void *dataReg = (void *)(&sercomBase->SPIM.SERCOM_DATA);
+#else
+        void *dataReg = (void *)(&sercomBase->SPI.DATA.reg);
+#endif
         if (dma.addDescriptor(dmaBuf, // move data from here
-                              (void *)(&sercomBase->SPI.DATA.reg), // to here
+                              dataReg, // to here
                               bytesTotal,         // this many...
                               DMA_BEAT_SIZE_BYTE, // bytes/hword/words
                               true,               // increment source addr?
@@ -310,7 +316,7 @@ bool Adafruit_NeoPixel_ZeroDMA::begin(SERCOM *sercom, Sercom *sercomBase,
  */
 bool Adafruit_NeoPixel_ZeroDMA::begin(void) {
   SERCOM *sercom = nullptr;
-  Sercom *sercomBase = nullptr;
+  AdafruitNeoPixelZeroDmaSercom *sercomBase = nullptr;
   uint8_t dmacID = 0;
   SercomSpiTXPad padTX = SPI_PAD_0_SCK_1;
   EPioType pinFunc = PIO_SERCOM;

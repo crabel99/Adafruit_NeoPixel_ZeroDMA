@@ -41,13 +41,23 @@ static SERCOM *const _sercoms[] = {
 #endif
 };
 
-static Sercom *const _sercomBases[] = {
+static AdafruitNeoPixelZeroDmaSercom *const _sercomBases[] = {
+#if defined(SERCOM0_REGS)
+    SERCOM0_REGS, SERCOM1_REGS, SERCOM2_REGS, SERCOM3_REGS,
+#if SERCOM_INST_NUM > 4
+    SERCOM4_REGS, SERCOM5_REGS,
+#endif
+#if SERCOM_INST_NUM > 6
+    SERCOM6_REGS, SERCOM7_REGS,
+#endif
+#else
     SERCOM0, SERCOM1, SERCOM2, SERCOM3,
 #if SERCOM_INST_NUM > 4
     SERCOM4, SERCOM5,
 #endif
 #if SERCOM_INST_NUM > 6
     SERCOM6, SERCOM7,
+#endif
 #endif
 };
 
