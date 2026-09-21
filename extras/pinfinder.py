@@ -58,7 +58,12 @@ def _strip_at_prefix(device: str) -> str:
 
 
 def macro_candidates(device: str) -> List[str]:
-    return [f"__{_strip_at_prefix(device)}__"]
+    dev = _strip_at_prefix(device)
+    # The SAM D5x/E5x datasheet tables omit the silicon-revision suffix, while
+    # Microchip's CMSIS headers use full part macros such as __SAME54P20A__.
+    if dev.startswith(("SAMD51", "SAME51", "SAME53", "SAME54")) and dev[-1].isdigit():
+        dev += "A"
+    return [f"__{dev}__"]
 
 
 def load_csv(path: Path, skip_rows: int = 0) -> List[Dict[str, str]]:

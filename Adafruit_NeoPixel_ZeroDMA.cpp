@@ -57,8 +57,11 @@ Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p,
 Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p,
                                                      neoPixelType t,
                                                      bool altSercom)
-    : Adafruit_NeoPixel(n, p, t), spi(NULL), dmaBuf(NULL), brightness(256),
-      _useAltSercom(altSercom) {}
+    : Adafruit_NeoPixel(n, p, t), spi(NULL), dmaBuf(NULL), stagingBuf(NULL),
+      brightness(256), _useAltSercom(altSercom), dmaDescriptor(NULL),
+      dmaBufferBytes(0), dmaActive(false), refreshPending(false),
+      stagingEncoding(false), dmaAllocated(false), ownsSpi(false),
+      spiTransactionStarted(false) {}
 
 /** @brief Default constructor exists for API compatibility, but this object
   still assumes fixed pin/length/type once DMA is initialized.
@@ -69,20 +72,86 @@ Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p,
   considered a supported path.
 */
 Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA(void)
-    : Adafruit_NeoPixel(), spi(NULL), dmaBuf(NULL), brightness(256),
-      _useAltSercom(false) {}
+    : Adafruit_NeoPixel(), spi(NULL), dmaBuf(NULL), stagingBuf(NULL),
+      brightness(256), _useAltSercom(false), dmaDescriptor(NULL),
+      dmaBufferBytes(0), dmaActive(false), refreshPending(false),
+      stagingEncoding(false), dmaAllocated(false), ownsSpi(false),
+      spiTransactionStarted(false) {}
+
+Adafruit_NeoPixel_ZeroDMA *
+    Adafruit_NeoPixel_ZeroDMA::dmaOwners[DMAC_CH_NUM] = {NULL};
 
 Adafruit_NeoPixel_ZeroDMA::~Adafruit_NeoPixel_ZeroDMA() {
-  dma.abort();
-  if (spi) {
-    spi->endTransaction();
-#ifdef SPI
-    if (spi != &SPI)
-      delete spi;
-#endif
+  releaseResources();
+}
+
+void Adafruit_NeoPixel_ZeroDMA::releaseResources() {
+  const uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+  unregisterDmaOwner();
+  if (dmaAllocated) {
+    dma.setCallback(NULL);
+    dma.abort();
+    dma.free();
+    dmaAllocated = false;
   }
-  if (dmaBuf)
-    free(dmaBuf);
+  dmaDescriptor = NULL;
+  dmaActive = false;
+  refreshPending = false;
+  stagingEncoding = false;
+  __set_PRIMASK(primask);
+
+  if (spiTransactionStarted) {
+    spi->endTransaction();
+    spiTransactionStarted = false;
+  }
+  if (ownsSpi)
+    delete spi;
+  spi = NULL;
+  ownsSpi = false;
+  free(dmaBuf);
+  free(stagingBuf);
+  dmaBuf = NULL;
+  stagingBuf = NULL;
+  dmaBufferBytes = 0;
+}
+
+bool Adafruit_NeoPixel_ZeroDMA::registerDmaOwner() {
+  for (uint8_t i = 0; i < DMAC_CH_NUM; ++i) {
+    if (dmaOwners[i] == NULL) {
+      dmaOwners[i] = this;
+      return true;
+    }
+  }
+  return false;
+}
+
+void Adafruit_NeoPixel_ZeroDMA::unregisterDmaOwner() {
+  for (uint8_t i = 0; i < DMAC_CH_NUM; ++i) {
+    if (dmaOwners[i] == this)
+      dmaOwners[i] = NULL;
+  }
+}
+
+void Adafruit_NeoPixel_ZeroDMA::dmaCallback(Adafruit_ZeroDMA *completedDma) {
+  for (uint8_t i = 0; i < DMAC_CH_NUM; ++i) {
+    Adafruit_NeoPixel_ZeroDMA *owner = dmaOwners[i];
+    if (owner != NULL && &owner->dma == completedDma) {
+      owner->handleDmaComplete();
+      return;
+    }
+  }
+}
+
+void Adafruit_NeoPixel_ZeroDMA::handleDmaComplete() {
+  dmaActive = false;
+  if (refreshPending && !stagingEncoding) {
+    uint8_t *completed = dmaBuf;
+    dmaBuf = stagingBuf;
+    stagingBuf = completed;
+    refreshPending = false;
+    (void)startTransfer(dmaBuf);
+  }
 }
 
 /** @brief Discover the SERCOM configuration for the Arduino pin stored in
@@ -97,7 +166,7 @@ Adafruit_NeoPixel_ZeroDMA::~Adafruit_NeoPixel_ZeroDMA() {
     @returns true and populates all out-parameters on success.
 */
 bool Adafruit_NeoPixel_ZeroDMA::_setupSercomFromPin(SERCOM **outSercom,
-                                                    Sercom **outSercomBase,
+                                                    AdafruitNeoPixelZeroDmaSercom **outSercomBase,
                                                     uint8_t *outDmacID,
                                                     SercomSpiTXPad *outPadTX,
                                                     EPioType *outPinFunc) {
@@ -158,12 +227,15 @@ bool Adafruit_NeoPixel_ZeroDMA::_setupSercomFromPin(SERCOM **outSercom,
     @param pinFunc The pinmux setup for which 'type' of pinmux we use
     @returns True or false on success
 */
-bool Adafruit_NeoPixel_ZeroDMA::begin(SERCOM *sercom, Sercom *sercomBase,
+bool Adafruit_NeoPixel_ZeroDMA::begin(SERCOM *sercom, AdafruitNeoPixelZeroDmaSercom *sercomBase,
                                       uint8_t dmacID, uint8_t mosi,
                                       SercomSpiTXPad padTX, EPioType pinFunc) {
 
   if (mosi != pin)
     return false; // Invalid pin
+
+  if (spiTransactionStarted)
+    return true;
 
   Adafruit_NeoPixel::begin(); // Call base class begin() function 1st
   // TO DO: Check for successful malloc in base class here
@@ -172,133 +244,91 @@ bool Adafruit_NeoPixel_ZeroDMA::begin(SERCOM *sercom, Sercom *sercomBase,
   // 3:1 to allow use of SPI peripheral to generate NeoPixel-like timing
   // (0b100 for a zero bit, 0b110 for a one bit).  SPI is clocked at
   // 2.4 MHz, the 3:1 sizing then creates NeoPixel-like 800 KHz bitrate.
-  // The extra 90 bytes is the low-level latch at the end of the NeoPixel
-  // data stream.  When idle, SPI logic level is normally HIGH, we need
-  // LOW for latch.  There is no invert option.  Various tricks like
-  // switching the pin to a normal LOW output at end of data don't quite
-  // work, there's still small glitches.  So, solution here is to keep
-  // the SPI DMA transfer in an endless loop...it actually issues the
-  // NeoPixel data over and over again forever (this doesn't cost us
-  // anything, since it's 100% DMA, no CPU use)...and those 90 zero
-  // bytes at the end provide the 300 microsecond EOD latch.  Hack!
+  // The final 90 zero bytes hold the data line low for 300 microseconds at
+  // 2.4 MHz, satisfying the reset/latch interval before the one-shot DMA
+  // descriptor completes.
 
   uint8_t bytesPerPixel = (wOffset == rOffset) ? 3 : 4;
-  uint32_t bytesTotal = (numLEDs * bytesPerPixel * 8 * 3 + 7) / 8 + 90;
-  if ((dmaBuf = (uint8_t *)malloc(bytesTotal))) {
-    spi = NULL; // No SPIClass assigned yet,
-                // check MOSI pin against existing defined SPI SERCOMs...
-#if SPI_INTERFACES_COUNT > 0
-    if (pin == PIN_SPI_MOSI) { // If NeoPixel pin is main SPI MOSI...
-      spi = &SPI;              // Use the existing SPIClass object
-      padTX = PAD_SPI_TX;
-    }
-#endif
-#if SPI_INTERFACES_COUNT > 1
-    else if (pin == PIN_SPI1_MOSI) { // If NeoPixel pin = secondary SPI MOSI...
-      spi = &SPI1;                   // Use the SPI1 SPIClass object
-      padTX = PAD_SPI1_TX;
-    }
-#endif
-#if SPI_INTERFACES_COUNT > 2
-    else if (pin == PIN_SPI2_MOSI) { // Ditto, tertiary SPI
-      spi = &SPI2;
-      padTX = PAD_SPI2_TX;
-    }
-#endif
-#if SPI_INTERFACES_COUNT > 3
-    else if (pin == PIN_SPI3_MOSI) {
-      spi = &SPI3;
-      padTX = PAD_SPI3_TX;
-    }
-#endif
-#if SPI_INTERFACES_COUNT > 4
-    else if (pin == PIN_SPI4_MOSI) {
-      spi = &SPI4;
-      padTX = PAD_SPI4_TX;
-    }
-#endif
-#if SPI_INTERFACES_COUNT > 5
-    else if (pin == PIN_SPI5_MOSI) {
-      spi = &SPI5;
-      padTX = PAD_SPI5_TX;
-    }
-#endif
-    // If NeoPixel pin is not an existing SPI SERCOM, allocate a new one.
-    if (spi == NULL) {
-      // SPIClassSAMD expects MISO, SCK, and MOSI pins plus an RX PAD.
-      // We only use MOSI for NeoPixel output, so we pass the same pin for
-      // all three roles and keep RX on PAD1. The constructor may touch
-      // pin muxing, but we immediately apply the exact mux selected by our
-      // datasheet-derived lookup via pinPeripheral(mosi, pinFunc) below.
-      spi = new SPIClassSAMD(sercom, mosi, mosi, mosi, padTX, SERCOM_RX_PAD_1);
-    }
-    if ((spi)) {
-      spi->begin();
-      pinPeripheral(mosi, pinFunc);
-      dma.setTrigger(dmacID);
-      dma.setAction(DMA_TRIGGER_ACTON_BEAT);
-      if (DMA_STATUS_OK == dma.allocate()) {
-        if (dma.addDescriptor(dmaBuf, // move data from here
-                              (void *)(&sercomBase->SPI.DATA.reg), // to here
-                              bytesTotal,         // this many...
-                              DMA_BEAT_SIZE_BYTE, // bytes/hword/words
-                              true,               // increment source addr?
-                              false)) {           // increment dest addr?
-          dma.loop(true); // DMA transaction loops forever! Latch is built in.
-          memset(dmaBuf, 0, bytesTotal); // IMPORTANT - clears latch data @ end
-          // SPI transaction is started BUT NEVER ENDS.  This is important.
-          // 800 khz * 3 = 2.4MHz
-          spi->beginTransaction(SPISettings(2400000, MSBFIRST, SPI_MODE0));
-          if (DMA_STATUS_OK == dma.startJob())
-            return true; // SUCCESS
-          // Else various errors, clean up partially-initialized stuff:
-          spi->endTransaction();
-        }
-        dma.free();
-      }
-      // Delete SPIClass object, UNLESS it's an existing (Arduino-defined) one
-#if SPI_INTERFACES_COUNT > 0
-      if (spi == &SPI) {
-        spi = NULL;
-      }
-#endif
-#if SPI_INTERFACES_COUNT > 1
-      else if (spi == &SPI1) {
-        spi = NULL;
-      }
-#endif
-#if SPI_INTERFACES_COUNT > 2
-      else if (spi == &SPI2) {
-        spi = NULL;
-      }
-#endif
-#if SPI_INTERFACES_COUNT > 3
-      else if (spi == &SPI3) {
-        spi = NULL;
-      }
-#endif
-#if SPI_INTERFACES_COUNT > 4
-      else if (spi == &SPI4) {
-        spi = NULL;
-      }
-#endif
-#if SPI_INTERFACES_COUNT > 5
-      else if (spi == &SPI5) {
-        spi = NULL;
-      }
-#endif
-
-#ifdef SPI
-      if (spi != NULL) {
-        delete spi;
-        spi = NULL;
-      }
-#endif
-    }
-    free(dmaBuf);
-    dmaBuf = NULL;
+  dmaBufferBytes = (numLEDs * bytesPerPixel * 8 * 3 + 7) / 8 + 90;
+  dmaBuf = (uint8_t *)malloc(dmaBufferBytes);
+  stagingBuf = (uint8_t *)malloc(dmaBufferBytes);
+  if (!dmaBuf || !stagingBuf) {
+    releaseResources();
+    return false;
   }
-  return false;
+
+#if SPI_INTERFACES_COUNT > 0
+  if (pin == PIN_SPI_MOSI) { // If NeoPixel pin is main SPI MOSI...
+    spi = &SPI;              // Use the existing SPIClass object
+    padTX = PAD_SPI_TX;
+  }
+#endif
+#if SPI_INTERFACES_COUNT > 1
+  else if (pin == PIN_SPI1_MOSI) { // If NeoPixel pin = secondary SPI MOSI...
+    spi = &SPI1;                   // Use the SPI1 SPIClass object
+    padTX = PAD_SPI1_TX;
+  }
+#endif
+#if SPI_INTERFACES_COUNT > 2
+  else if (pin == PIN_SPI2_MOSI) { // Ditto, tertiary SPI
+    spi = &SPI2;
+    padTX = PAD_SPI2_TX;
+  }
+#endif
+#if SPI_INTERFACES_COUNT > 3
+  else if (pin == PIN_SPI3_MOSI) {
+    spi = &SPI3;
+    padTX = PAD_SPI3_TX;
+  }
+#endif
+#if SPI_INTERFACES_COUNT > 4
+  else if (pin == PIN_SPI4_MOSI) {
+    spi = &SPI4;
+    padTX = PAD_SPI4_TX;
+  }
+#endif
+#if SPI_INTERFACES_COUNT > 5
+  else if (pin == PIN_SPI5_MOSI) {
+    spi = &SPI5;
+    padTX = PAD_SPI5_TX;
+  }
+#endif
+  if (spi == NULL) {
+    // Only MOSI is used; apply the selected mux after SPI initialization.
+    spi = new SPIClassSAMD(sercom, mosi, mosi, mosi, padTX, SERCOM_RX_PAD_1);
+    ownsSpi = (spi != NULL);
+  }
+  if (spi == NULL || !spi->begin()) {
+    releaseResources();
+    return false;
+  }
+  pinPeripheral(mosi, pinFunc);
+  dma.setTrigger(dmacID);
+  dma.setAction(DMA_TRIGGER_ACTON_BEAT);
+  if (DMA_STATUS_OK != dma.allocate()) {
+    releaseResources();
+    return false;
+  }
+  dmaAllocated = true;
+#if defined(SERCOM0_REGS)
+  void *dataReg = (void *)(&sercomBase->SPIM.SERCOM_DATA);
+#else
+  void *dataReg = (void *)(&sercomBase->SPI.DATA.reg);
+#endif
+  dmaDescriptor = dma.addDescriptor(
+      dmaBuf, dataReg, dmaBufferBytes,
+      DMA_BEAT_SIZE_BYTE, true, false);
+  if (dmaDescriptor == NULL || !registerDmaOwner()) {
+    releaseResources();
+    return false;
+  }
+  memset(dmaBuf, 0, dmaBufferBytes);
+  memset(stagingBuf, 0, dmaBufferBytes);
+  dma.loop(false);
+  dma.setCallback(dmaCallback);
+  spi->beginTransaction(SPISettings(2400000, MSBFIRST, SPI_MODE0));
+  spiTransactionStarted = true;
+  return true;
 }
 
 /** @brief Initialize SPI SERCOM and DMA from the selected pin
@@ -310,7 +340,7 @@ bool Adafruit_NeoPixel_ZeroDMA::begin(SERCOM *sercom, Sercom *sercomBase,
  */
 bool Adafruit_NeoPixel_ZeroDMA::begin(void) {
   SERCOM *sercom = nullptr;
-  Sercom *sercomBase = nullptr;
+  AdafruitNeoPixelZeroDmaSercom *sercomBase = nullptr;
   uint8_t dmacID = 0;
   SercomSpiTXPad padTX = SPI_PAD_0_SCK_1;
   EPioType pinFunc = PIO_SERCOM;
@@ -325,14 +355,17 @@ bool Adafruit_NeoPixel_ZeroDMA::begin(void) {
 
 /** @brief Convert the NeoPixel buffer to larger DMA buffer and start xfer
  */
-void Adafruit_NeoPixel_ZeroDMA::show(void) {
+void Adafruit_NeoPixel_ZeroDMA::encodeInto(uint8_t *buffer) {
+  if (buffer == NULL)
+    return;
+
   // Expand 8 bits 'abcdefgh' to 24 bits '1a01b01c01d01e01f01g01h0'
 #ifdef _BITTABLE_H_
   // If bittable.h is included, 3:1 bit expansion is handled using a table
   // lookup -- each byte of input (from NeoPixel buffer) is replaced with
   // three bytes output (from table to DMA buffer).  This is about twice
   // as quick as math below but the table requires about 1KB of code space.
-  uint8_t *in = pixels, *out = dmaBuf;
+  uint8_t *in = pixels, *out = buffer;
   uint32_t expanded;
   for (uint16_t p = numBytes; p--;) {
     expanded = bitExpand[(*in++ * brightness) >> 8];
@@ -343,7 +376,7 @@ void Adafruit_NeoPixel_ZeroDMA::show(void) {
 #else
   // If bittable.h is NOT included, 3:1 bit expansion is done on the fly.
   // More complex, but smaller executable.
-  uint8_t *in = pixels, *out = dmaBuf, i, abef, cdgh;
+  uint8_t *in = pixels, *out = buffer, i, abef, cdgh;
   uint32_t expanded;
   for (uint16_t p = numBytes; p--;) {
     cdgh = (*in++ * brightness) >> 8;
@@ -357,6 +390,43 @@ void Adafruit_NeoPixel_ZeroDMA::show(void) {
     *out++ = expanded;
   }
 #endif
+}
+
+bool Adafruit_NeoPixel_ZeroDMA::startTransfer(uint8_t *buffer) {
+  if (buffer == NULL || dmaDescriptor == NULL)
+    return false;
+  dma.changeDescriptor(dmaDescriptor, buffer, NULL, dmaBufferBytes);
+  dmaActive = (DMA_STATUS_OK == dma.startJob());
+  return dmaActive;
+}
+
+/** @brief Encode the latest pixels and submit one finite DMA transfer. */
+void Adafruit_NeoPixel_ZeroDMA::show(void) {
+  if (dmaBuf == NULL || stagingBuf == NULL)
+    return;
+
+  if (!dmaActive) {
+    encodeInto(dmaBuf);
+    (void)startTransfer(dmaBuf);
+    return;
+  }
+
+  stagingEncoding = true;
+  encodeInto(stagingBuf);
+  stagingEncoding = false;
+
+  const uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+  if (dmaActive) {
+    refreshPending = true;
+  } else {
+    uint8_t *completed = dmaBuf;
+    dmaBuf = stagingBuf;
+    stagingBuf = completed;
+    refreshPending = false;
+    (void)startTransfer(dmaBuf);
+  }
+  __set_PRIMASK(primask);
 }
 
 /** @brief

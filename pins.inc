@@ -27,7 +27,7 @@
 #endif
 
 #ifndef SAMD5X_E5X_48_SERIES
-#if defined(__SAMD51G18__) || defined(__SAMD51G19__) || defined(__SAME51G18__) || defined(__SAME51G19__)
+#if defined(__SAMD51G18A__) || defined(__SAMD51G19A__) || defined(__SAME51G18A__) || defined(__SAME51G19A__)
 #define SAMD5X_E5X_48_SERIES 1
 #else
 #define SAMD5X_E5X_48_SERIES 0
@@ -35,7 +35,7 @@
 #endif
 
 #ifndef SAMD5X_E5X_64_SERIES
-#if defined(__SAMD51J18__) || defined(__SAMD51J19__) || defined(__SAMD51J20__) || defined(__SAME51J18__) || defined(__SAME51J19__) || defined(__SAME51J20__) || defined(__SAME53J18__) || defined(__SAME53J19__) || defined(__SAME53J20__)
+#if defined(__SAMD51J18A__) || defined(__SAMD51J19A__) || defined(__SAMD51J20A__) || defined(__SAME51J18A__) || defined(__SAME51J19A__) || defined(__SAME51J20A__) || defined(__SAME53J18A__) || defined(__SAME53J19A__) || defined(__SAME53J20A__)
 #define SAMD5X_E5X_64_SERIES 1
 #else
 #define SAMD5X_E5X_64_SERIES 0
@@ -43,7 +43,7 @@
 #endif
 
 #ifndef SAMD5X_E5X_100_SERIES
-#if defined(__SAMD51N19__) || defined(__SAMD51N20__) || defined(__SAME51N19__) || defined(__SAME51N20__) || defined(__SAME53N19__) || defined(__SAME53N20__) || defined(__SAME54N19__) || defined(__SAME54N20__)
+#if defined(__SAMD51N19A__) || defined(__SAMD51N20A__) || defined(__SAME51N19A__) || defined(__SAME51N20A__) || defined(__SAME53N19A__) || defined(__SAME53N20A__) || defined(__SAME54N19A__) || defined(__SAME54N20A__)
 #define SAMD5X_E5X_100_SERIES 1
 #else
 #define SAMD5X_E5X_100_SERIES 0
@@ -51,7 +51,7 @@
 #endif
 
 #ifndef SAMD5X_E5X_120_SERIES
-#if defined(__SAMD51P19__) || defined(__SAMD51P20__) || defined(__SAME54P19__) || defined(__SAME54P20__)
+#if defined(__SAMD51P19A__) || defined(__SAMD51P20A__) || defined(__SAME54P19A__) || defined(__SAME54P20A__)
 #define SAMD5X_E5X_120_SERIES 1
 #else
 #define SAMD5X_E5X_120_SERIES 0

@@ -12,6 +12,12 @@
 typedef SPIClass SPIClassSAMD;
 #endif
 
+#if defined(SERCOM0_REGS)
+typedef sercom_registers_t AdafruitNeoPixelZeroDmaSercom;
+#else
+typedef Sercom AdafruitNeoPixelZeroDmaSercom;
+#endif
+
 /** @brief Create a NeoPixel class that uses SPI DMA to write strands in
     a non-blocking manner */
 class Adafruit_NeoPixel_ZeroDMA : public Adafruit_NeoPixel {
@@ -28,7 +34,7 @@ public:
   bool begin(void);
   // Although esoteric, there IS a use case for keeping this overloaded
   // begin() variant public, please DO NOT move to the protected section.
-  bool begin(SERCOM *sercom, Sercom *sercomBase, uint8_t dmacID, uint8_t mosi,
+  bool begin(SERCOM *sercom, AdafruitNeoPixelZeroDmaSercom *sercomBase, uint8_t dmacID, uint8_t mosi,
              SercomSpiTXPad padTX, EPioType pinFunc);
   void show();
   void setBrightness(uint8_t);
@@ -43,11 +49,28 @@ protected:
   Adafruit_ZeroDMA dma; ///< The DMA manager for the SPI class
   SPIClassSAMD *spi;    ///< Underlying SPI hardware interface we use to DMA
   uint8_t *dmaBuf;      ///< The raw buffer we write to SPI to mimic NeoPixel
+  uint8_t *stagingBuf;  ///< Buffer prepared while the active buffer is in flight
   uint16_t brightness;  ///<  1 (off) to 256 (brightest)
 
 private:
   bool _useAltSercom; ///< Prefer ALT SERCOM variant if available
-  bool _setupSercomFromPin(SERCOM **outSercom, Sercom **outSercomBase,
+  DmacDescriptor *dmaDescriptor;
+  uint32_t dmaBufferBytes;
+  volatile bool dmaActive;
+  volatile bool refreshPending;
+  volatile bool stagingEncoding;
+  bool dmaAllocated;
+  bool ownsSpi;
+  bool spiTransactionStarted;
+  void releaseResources();
+  static Adafruit_NeoPixel_ZeroDMA *dmaOwners[DMAC_CH_NUM];
+  static void dmaCallback(Adafruit_ZeroDMA *dma);
+  void handleDmaComplete();
+  void encodeInto(uint8_t *buffer);
+  bool startTransfer(uint8_t *buffer);
+  bool registerDmaOwner();
+  void unregisterDmaOwner();
+  bool _setupSercomFromPin(SERCOM **outSercom, AdafruitNeoPixelZeroDmaSercom **outSercomBase,
                            uint8_t *outDmacID, SercomSpiTXPad *outPadTX,
                            EPioType *outPinFunc);
 };
