@@ -12,6 +12,12 @@
 typedef SPIClass SPIClassSAMD;
 #endif
 
+#if defined(SERCOM0_REGS)
+typedef sercom_registers_t AdafruitNeoPixelZeroDmaSercom;
+#else
+typedef Sercom AdafruitNeoPixelZeroDmaSercom;
+#endif
+
 /** @brief Create a NeoPixel class that uses SPI DMA to write strands in
     a non-blocking manner */
 class Adafruit_NeoPixel_ZeroDMA : public Adafruit_NeoPixel {
@@ -19,13 +25,16 @@ class Adafruit_NeoPixel_ZeroDMA : public Adafruit_NeoPixel {
 public:
   Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p = 6,
                             neoPixelType t = NEO_GRB);
+  // Uses NeoPixel default color order (NEO_GRB).
+  Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p, neoPixelType t,
+                            bool altSercom);
   Adafruit_NeoPixel_ZeroDMA(void);
   ~Adafruit_NeoPixel_ZeroDMA();
 
   bool begin(void);
   // Although esoteric, there IS a use case for keeping this overloaded
   // begin() variant public, please DO NOT move to the protected section.
-  bool begin(SERCOM *sercom, Sercom *sercomBase, uint8_t dmacID, uint8_t mosi,
+  bool begin(SERCOM *sercom, AdafruitNeoPixelZeroDmaSercom *sercomBase, uint8_t dmacID, uint8_t mosi,
              SercomSpiTXPad padTX, EPioType pinFunc);
   void show();
   void setBrightness(uint8_t);
@@ -40,15 +49,30 @@ protected:
   Adafruit_ZeroDMA dma; ///< The DMA manager for the SPI class
   SPIClassSAMD *spi;    ///< Underlying SPI hardware interface we use to DMA
   uint8_t *dmaBuf;      ///< The raw buffer we write to SPI to mimic NeoPixel
+  uint8_t *stagingBuf;  ///< Buffer prepared while the active buffer is in flight
   uint16_t brightness;  ///<  1 (off) to 256 (brightest)
-#ifdef __SAMD51__
-  // Hacky stuff for Trellis M4: PA27 (to NeoPixel matrix) is not on a
-  // SERCOM, nor a pattern generator pin (which would work with NeoPXL8),
-  // so we use the PORT toggle register to DMA NeoPixel data out. This is
-  // not RAM-efficient but we're just looking to control the 32 pixels of
-  // that matrix, not arbitrary-length strips, so the waste is localized.
-  uint8_t toggleMask; // Port bit to toggle
-#endif
+
+private:
+  bool _useAltSercom; ///< Prefer ALT SERCOM variant if available
+  DmacDescriptor *dmaDescriptor;
+  uint32_t dmaBufferBytes;
+  volatile bool dmaActive;
+  volatile bool refreshPending;
+  volatile bool stagingEncoding;
+  bool dmaAllocated;
+  bool ownsSpi;
+  bool spiTransactionStarted;
+  void releaseResources();
+  static Adafruit_NeoPixel_ZeroDMA *dmaOwners[DMAC_CH_NUM];
+  static void dmaCallback(Adafruit_ZeroDMA *dma);
+  void handleDmaComplete();
+  void encodeInto(uint8_t *buffer);
+  bool startTransfer(uint8_t *buffer);
+  bool registerDmaOwner();
+  void unregisterDmaOwner();
+  bool _setupSercomFromPin(SERCOM **outSercom, AdafruitNeoPixelZeroDmaSercom **outSercomBase,
+                           uint8_t *outDmacID, SercomSpiTXPad *outPadTX,
+                           EPioType *outPinFunc);
 };
 
 #endif // _ADAFRUIT_NEOPIXEL_ZERODMA_H_
