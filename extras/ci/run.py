@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 
-FRAMEWORK_SHA = "456a23a731616784a5262102b10869616e9b0598"
+FRAMEWORK_SHA = "13f0abbd25515ae3984571836de1cbf7d2b08f7e"
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -39,6 +39,7 @@ def main():
         "framework = arduino\n"
         "platform_packages =\n"
         f"  framework-arduino-samd-adafruit@symlink://{framework}\n"
+        "  framework-cmsis-atmel@https://github.com/crabel99/ArduinoModule-CMSIS-Atmel.git#e3072fc23b6ebbd54f0e05a3f65d1e58497aba7d\n"
         "lib_deps =\n"
         f"  symlink://{ROOT}\n"
         f"  symlink://{framework / 'libraries' / 'Adafruit_ZeroDMA'}\n"

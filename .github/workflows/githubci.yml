@@ -16,7 +16,7 @@ jobs:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       with:
          repository: crabel99/SimIOFramework
-         ref: 456a23a731616784a5262102b10869616e9b0598
+         ref: 13f0abbd25515ae3984571836de1cbf7d2b08f7e
          path: .ci/SimIOFramework
          submodules: recursive
 

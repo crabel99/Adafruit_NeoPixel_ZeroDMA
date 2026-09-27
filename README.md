@@ -38,8 +38,12 @@ Adafruit_NeoPixel_ZeroDMA instance with the desired values before calling
 
 ## Verification
 
-The CI workflow runs the Python and native lifecycle checks, then compiles
-`strandtest` for Adafruit Metro M0 and Metro M4 with SimIOFramework pinned in
-the workflow. The former upstream Doxygen deployment is not run because it
-published through Adafruit-specific credentials and did not validate this
-Framework-pinned build.
+CI runs the Python and native lifecycle checks and compiles `strandtest` for
+Adafruit Metro M0 and Metro M4 against the pinned SimIOFramework revision.
+It also checks C++ formatting with clang-format 18.1.8 and generates Doxygen
+output in `build/doxygen`.
+
+Run the same checks locally with `python extras/ci/run.py --framework <checkout>`.
+The checkout must be at the revision recorded by the script. PlatformIO 6.1.19,
+clang-format 18.1.8, and Doxygen must be available on the command path; the script
+also accepts explicit `--pio`, `--clang-format`, and `--doxygen` paths.
