@@ -2,105 +2,218 @@
 #include <string>
 #include <unordered_set>
 #include "Adafruit_NeoPixel.h"
-#include "Adafruit_ZeroDMA.h"
 #include "SPI.h"
 namespace observed {
-uint32_t primask=0;
-bool spiBeginResult=true, allocationFails=false, descriptorFails=false;
-unsigned spiBegins=0, spiTransactions=0, starts=0, aborts=0, frees=0, pinMuxes=0;
-unsigned spiConstructed=0, spiDestroyed=0, allocated=0;
-unsigned invalidAborts=0, invalidFrees=0, transactionEnds=0, activeTransactions=0;
-unsigned callbackAtAbort=0, restartsDuringAbort=0;
-void *owners[32]={};
+uint32_t primask = 0;
+void (*beforeMaskRead)() = nullptr;
+bool spiBeginResult = true;
+bool spiTransferFails = false;
+unsigned spiBegins = 0, spiTransactions = 0, spiTransfers = 0, spiEnds = 0, pinMuxes = 0;
+const uint8_t *spiSource = nullptr;
+size_t spiLength = 0, spiOffset = 0;
+void (*spiCallback)(void *, int) = nullptr;
+void *spiUser = nullptr;
+std::vector<std::vector<uint8_t>> spiSubmitted, spiCompleted;
+unsigned spiConstructed = 0, spiDestroyed = 0, transactionEnds = 0, activeTransactions = 0;
 std::unordered_set<void *> buffers;
-unsigned mallocCalls=0, failMallocCall=0;
-}
+unsigned mallocCalls = 0, failMallocCall = 0, freedActiveSources = 0;
+} // namespace observed
 void *trackedMalloc(size_t n) {
- if (++observed::mallocCalls==observed::failMallocCall) return nullptr;
- void *p=std::malloc(n); if (p) observed::buffers.insert(p); return p;
+  if (++observed::mallocCalls == observed::failMallocCall)
+    return nullptr;
+  void *p = std::malloc(n);
+  if (p)
+    observed::buffers.insert(p);
+  return p;
 }
-void trackedFree(void *p) { observed::buffers.erase(p); std::free(p); }
+void trackedFree(void *p) {
+  if (p != nullptr && p == observed::spiSource)
+    ++observed::freedActiveSources;
+  observed::buffers.erase(p);
+  std::free(p);
+}
 #define malloc trackedMalloc
-// Instrument both buffer release and the fake DMA release method.
 #define free(...) FREE_DISPATCH(__VA_ARGS__)
 #define FREE_DISPATCH(...) trackedFree(__VA_ARGS__)
 #include "../../Adafruit_NeoPixel_ZeroDMA.cpp"
 #undef malloc
 #undef free
-SERCOM sercom0{0}, sercom1{1}, sercom2{2}, sercom3{3}, sercom4{4}, sercom5{5}, sercom6{6}, sercom7{7};
-sercom_registers_t registers[8]={};
-PinDescription g_APinDescription[PINS_COUNT]={};
+SERCOM sercom0{0}, sercom1{1}, sercom2{2}, sercom3{3}, sercom4{4}, sercom5{5}, sercom6{6},
+    sercom7{7};
+sercom_registers_t registers[8] = {};
+PinDescription g_APinDescription[PINS_COUNT] = {};
 SPIClass SPI(&sercom0, 9, 9, 9, SPI_PAD_0_SCK_1, SERCOM_RX_PAD_1);
 class InspectableStrip : public Adafruit_NeoPixel_ZeroDMA {
 public:
- using Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA;
- Adafruit_ZeroDMA *managedDma() { return &dma; }
+  using Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA;
+  void frame(uint8_t value) {
+    memset(pixels, value, numBytes);
+    show();
+  }
 };
-unsigned failures=0;
+unsigned failures = 0;
 void check(bool condition, const char *message) {
- if (!condition) { ++failures; std::cout << "FAIL " << message << '\n'; }
+  if (!condition) {
+    ++failures;
+    std::cout << "FAIL " << message << '\n';
+  }
 }
-bool initialize(Adafruit_NeoPixel_ZeroDMA &strip, uint8_t pin=33) {
- return strip.begin(&sercom1, &registers[1], 7, pin, SPI_PAD_0_SCK_1, PIO_SERCOM);
+bool initialize(Adafruit_NeoPixel_ZeroDMA &strip, uint8_t pin = 33) {
+  return strip.begin(&sercom1, pin, SPI_PAD_0_SCK_1, PIO_SERCOM);
+}
+void completeSpi() {
+  if (!observed::spiSource)
+    return;
+  observed::spiCompleted.back().insert(observed::spiCompleted.back().end(),
+                                       observed::spiSource + observed::spiOffset,
+                                       observed::spiSource + observed::spiLength);
+  auto callback = observed::spiCallback;
+  auto user = observed::spiUser;
+  observed::spiSource = nullptr;
+  observed::spiCallback = nullptr;
+  observed::spiUser = nullptr;
+  callback(user, 0);
+}
+void advanceSpi(size_t count) {
+  if (!observed::spiSource)
+    return;
+  const size_t remain = observed::spiLength - observed::spiOffset;
+  if (count > remain)
+    count = remain;
+  observed::spiCompleted.back().insert(observed::spiCompleted.back().end(),
+                                       observed::spiSource + observed::spiOffset,
+                                       observed::spiSource + observed::spiOffset + count);
+  observed::spiOffset += count;
+  if (observed::spiOffset == observed::spiLength) {
+    auto callback = observed::spiCallback;
+    auto user = observed::spiUser;
+    observed::spiSource = nullptr;
+    observed::spiCallback = nullptr;
+    observed::spiUser = nullptr;
+    callback(user, 0);
+  }
+}
+std::vector<uint8_t> expectedFrame(uint8_t first, uint8_t second, uint8_t third) {
+  std::vector<uint8_t> frame(99, 0);
+  for (size_t i = 0; i < 9; i += 3) {
+    frame[i] = first;
+    frame[i + 1] = second;
+    frame[i + 2] = third;
+  }
+  return frame;
 }
 void released(unsigned constructed, unsigned destroyed) {
- check(observed::allocated==0, "DMA channels released");
- check(observed::invalidAborts==0, "no abort on unallocated DMA");
- check(observed::invalidFrees==0, "no free on unallocated DMA");
- check(observed::activeTransactions==0, "SPI transactions balanced");
- check(observed::spiConstructed-constructed==observed::spiDestroyed-destroyed, "owned SPI deleted exactly once");
- check(observed::buffers.empty(), "DMA buffers released");
- check(observed::callbackAtAbort==0, "callback detached before abort");
- check(observed::restartsDuringAbort==0, "queued DMA not restarted during teardown");
+  check(observed::activeTransactions == 0, "SPI transactions balanced");
+  check(observed::spiConstructed - constructed == observed::spiDestroyed - destroyed,
+        "owned SPI deleted exactly once");
+  check(observed::buffers.empty(), "frame buffers released");
+  check(observed::freedActiveSources == 0, "SPI releases its source pointer before buffer free");
 }
 int main(int argc, char **argv) {
- if (argc!=2) return 2;
- std::string name=argv[1];
- auto constructed=observed::spiConstructed, destroyed=observed::spiDestroyed;
- if (name=="finite_transfer") {
-  InspectableStrip strip(1,33);
-  check(initialize(strip), "valid begin succeeds");
-  check(observed::starts==0, "begin does not start transfer");
-  strip.show(); check(observed::starts==1, "show starts first transfer");
-  strip.show(); check(observed::starts==1, "pending frame waits for completion");
-  strip.managedDma()->complete(); check(observed::starts==2, "completion submits pending frame");
-  strip.managedDma()->complete(); check(observed::starts==2, "finite transfer stops without pending frame");
- }
- else if (name=="never_begun") { Adafruit_NeoPixel_ZeroDMA strip(1,33); }
- else if (name=="invalid_pin") { Adafruit_NeoPixel_ZeroDMA strip(1,33); check(!initialize(strip,32), "invalid pin rejected"); }
- else if (name=="active_destroy" || name=="irq_restore") { if (name=="irq_restore") observed::primask=1; Adafruit_NeoPixel_ZeroDMA strip(1,33); check(initialize(strip), "begin succeeds"); strip.show(); strip.show(); }
- else if (name=="allocation_failure" || name=="descriptor_failure" || name=="spi_failure") {
-  observed::allocationFails=name=="allocation_failure";
-  observed::descriptorFails=name=="descriptor_failure";
-  observed::spiBeginResult=name!="spi_failure";
-  Adafruit_NeoPixel_ZeroDMA strip(1,33);
-  check(!initialize(strip), "failed initialization propagates");
-  check(observed::allocated==0 && observed::buffers.empty(), "failed begin releases immediately");
-  check(observed::spiDestroyed-destroyed==1, "failed begin deletes owned SPI immediately");
-  check(observed::spiTransactions==0 && observed::starts==0, "failed begin starts no transaction or DMA transfer");
-  observed::allocationFails=false; observed::descriptorFails=false; observed::spiBeginResult=true;
-  check(initialize(strip), "retry succeeds"); strip.show();
- }
- else if (name=="buffer_failure_1" || name=="buffer_failure_2") {
-  observed::failMallocCall=name=="buffer_failure_1" ? 1 : 2;
-  Adafruit_NeoPixel_ZeroDMA strip(1,33); check(!initialize(strip), "buffer failure rejected");
-  check(observed::buffers.empty(), "partial buffer allocation released immediately");
-  observed::failMallocCall=0; check(initialize(strip), "retry after buffer failure");
- }
- else if (name=="borrowed_spi") { Adafruit_NeoPixel_ZeroDMA strip(1,9); check(initialize(strip,9), "borrowed SPI begin"); strip.show(); }
- else if (name=="begin_twice") { Adafruit_NeoPixel_ZeroDMA strip(1,33); check(initialize(strip), "first begin"); strip.show(); check(initialize(strip), "second begin"); check(observed::allocated==1, "second begin retains one DMA channel"); check(observed::buffers.size()==2, "second begin retains two buffers"); }
- else if (name=="channel_reuse") {
-  for (unsigned i=0; i<DMAC_CH_NUM*3; ++i) { Adafruit_NeoPixel_ZeroDMA strip(1,33); check(initialize(strip), "repeated lifetime allocates channel"); strip.show(); }
- }
- else if (name=="callback_reuse") {
-  Adafruit_ZeroDMA::Callback oldCallback=nullptr; Adafruit_ZeroDMA *oldDma=nullptr;
-  { InspectableStrip strip(1,33); check(initialize(strip), "first begin"); strip.show(); strip.show(); oldDma=strip.managedDma(); oldCallback=oldDma->completionCallback(); }
-  auto starts=observed::starts; oldCallback(oldDma); check(observed::starts==starts, "stale completion has no owner");
-  { InspectableStrip strip(1,33); check(initialize(strip), "reused channel begins"); strip.show(); strip.show(); auto dma=strip.managedDma(); starts=observed::starts; dma->complete(); check(observed::starts==starts+1, "new owner's pending frame starts"); }
- }
- else return 2;
- check(observed::primask==(name=="irq_restore" ? 1u : 0u), "prior interrupt mask restored");
- released(constructed,destroyed);
- std::cout << name << ": " << (failures ? "FAIL" : "PASS") << '\n';
- return failures ? 1 : 0;
+  if (argc != 2)
+    return 2;
+  std::string name = argv[1];
+  auto constructed = observed::spiConstructed, destroyed = observed::spiDestroyed;
+  if (name == "spi_pipeline_required") {
+    InspectableStrip strip(1, 33);
+    check(initialize(strip), "begin succeeds");
+    strip.show();
+    check(observed::spiTransfers == 1, "show queues the frame through SPI");
+    completeSpi();
+  } else if (name == "pending_frames" || name == "completion_during_publish" ||
+             name == "in_flight_buffer") {
+    InspectableStrip strip(1, 33);
+    check(initialize(strip), "begin succeeds");
+    strip.frame(0);
+    if (name == "in_flight_buffer")
+      advanceSpi(3);
+    strip.frame(0x80);
+    if (name == "completion_during_publish")
+      observed::beforeMaskRead = [] { completeSpi(); };
+    strip.frame(0xff);
+    observed::beforeMaskRead = nullptr;
+    if (name == "in_flight_buffer")
+      check(observed::spiCompleted.front().size() == 3,
+            "active SPI source is retained during staging encode");
+    completeSpi();
+    completeSpi();
+    check(observed::spiSubmitted.size() == 2, "only active and newest pending frames queue");
+    check(observed::spiSubmitted ==
+              std::vector<std::vector<uint8_t>>{expectedFrame(0x92, 0x49, 0x24),
+                                                expectedFrame(0xdb, 0x6d, 0xb6)},
+          "SPI submits exact A then C payloads and latch bytes");
+    check(observed::spiSubmitted == observed::spiCompleted, "SPI consumes retained source bytes");
+  } else if (name == "transfer_failure") {
+    InspectableStrip strip(1, 33);
+    check(initialize(strip), "begin succeeds");
+    observed::spiTransferFails = true;
+    strip.show();
+    observed::spiTransferFails = false;
+    strip.show();
+    check(observed::spiSource != nullptr, "synchronous SPI failure clears active state");
+    completeSpi();
+  } else if (name == "destroy_active") {
+    {
+      InspectableStrip strip(1, 33);
+      check(initialize(strip), "begin succeeds");
+      strip.show();
+    }
+    check(observed::spiSource == nullptr, "destruction cancels SPI before buffers release");
+  } else if (name == "never_begun") {
+    Adafruit_NeoPixel_ZeroDMA strip(1, 33);
+  } else if (name == "invalid_pin") {
+    Adafruit_NeoPixel_ZeroDMA strip(1, 33);
+    check(!initialize(strip, 32), "invalid pin rejected");
+  } else if (name == "spi_begin_failure") {
+    observed::spiBeginResult = false;
+    Adafruit_NeoPixel_ZeroDMA strip(1, 33);
+    check(!initialize(strip), "SPI begin failure propagates");
+    check(observed::buffers.empty(), "failed SPI begin releases frame buffers");
+    observed::spiBeginResult = true;
+    check(initialize(strip), "SPI begin retry succeeds");
+    strip.show();
+    completeSpi();
+  } else if (name == "buffer_failure_1" || name == "buffer_failure_2") {
+    observed::failMallocCall = name == "buffer_failure_1" ? 1 : 2;
+    Adafruit_NeoPixel_ZeroDMA strip(1, 33);
+    check(!initialize(strip), "buffer allocation failure propagates");
+    check(observed::buffers.empty(), "partial frame allocation releases buffers");
+    observed::failMallocCall = 0;
+    check(initialize(strip), "buffer allocation retry succeeds");
+    strip.show();
+    completeSpi();
+  } else if (name == "borrowed_spi") {
+    Adafruit_NeoPixel_ZeroDMA strip(1, 9);
+    check(initialize(strip, 9), "borrowed SPI begins");
+    strip.show();
+    completeSpi();
+    check(observed::spiDestroyed == destroyed, "borrowed SPI is not deleted");
+  } else if (name == "begin_twice") {
+    InspectableStrip strip(1, 33);
+    check(initialize(strip), "first begin succeeds");
+    check(initialize(strip), "second begin succeeds");
+    strip.show();
+    check(observed::spiTransfers == 1, "second begin preserves one frame allocation");
+    check(observed::spiBegins == 1 && observed::mallocCalls == 2,
+          "second begin does not reinitialize SPI or buffers");
+    completeSpi();
+  } else if (name == "repeated_lifetimes") {
+    for (unsigned i = 0; i < 8; ++i) {
+      InspectableStrip strip(1, 33);
+      check(initialize(strip), "lifetime begins");
+      strip.show();
+    }
+    check(observed::spiSource == nullptr, "each lifetime cancels its active SPI source");
+  } else if (name == "irq_restore") {
+    observed::primask = 1;
+    InspectableStrip strip(1, 33);
+    check(initialize(strip), "begin succeeds");
+    strip.show();
+    completeSpi();
+  } else
+    return 2;
+  check(observed::primask == (name == "irq_restore" ? 1u : 0u), "interrupt mask restored");
+  released(constructed, destroyed);
+  std::cout << name << ": " << (failures ? "FAIL" : "PASS") << '\n';
+  return failures ? 1 : 0;
 }

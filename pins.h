@@ -11,13 +11,12 @@ struct _SercomPinLookup {
   uint8_t portPin;   ///< Pin index within the selected port (0-31).
   uint8_t sercomNum; ///< SERCOM instance index.
   uint8_t pad;       ///< SERCOM pad number (0-3).
-  uint8_t mux; ///< Pin mux selector: 2=PIO_SERCOM (MUX C), 3=PIO_SERCOM_ALT
-               ///< (MUX D).
+  uint8_t mux;       ///< Pin mux selector: 2=PIO_SERCOM (MUX C), 3=PIO_SERCOM_ALT
+                     ///< (MUX D).
 };
 
 static const _SercomPinLookup _sercomPinTable[] = {
-#define SERCOM_PIN(port, portPin, sercomNum, pad, mux)                         \
-  {port, portPin, sercomNum, pad, mux},
+#define SERCOM_PIN(port, portPin, sercomNum, pad, mux) {port, portPin, sercomNum, pad, mux},
 #include "pins.inc"
 #undef SERCOM_PIN
 };
@@ -38,36 +37,5 @@ static SERCOM *const _sercoms[] = {
 #endif
 #if SERCOM_INST_NUM > 6
     &sercom6, &sercom7,
-#endif
-};
-
-static AdafruitNeoPixelZeroDmaSercom *const _sercomBases[] = {
-#if defined(SERCOM0_REGS)
-    SERCOM0_REGS, SERCOM1_REGS, SERCOM2_REGS, SERCOM3_REGS,
-#if SERCOM_INST_NUM > 4
-    SERCOM4_REGS, SERCOM5_REGS,
-#endif
-#if SERCOM_INST_NUM > 6
-    SERCOM6_REGS, SERCOM7_REGS,
-#endif
-#else
-    SERCOM0, SERCOM1, SERCOM2, SERCOM3,
-#if SERCOM_INST_NUM > 4
-    SERCOM4, SERCOM5,
-#endif
-#if SERCOM_INST_NUM > 6
-    SERCOM6, SERCOM7,
-#endif
-#endif
-};
-
-static const uint8_t _sercomDmacId[] = {
-    SERCOM0_DMAC_ID_TX, SERCOM1_DMAC_ID_TX,
-    SERCOM2_DMAC_ID_TX, SERCOM3_DMAC_ID_TX,
-#if SERCOM_INST_NUM > 4
-    SERCOM4_DMAC_ID_TX, SERCOM5_DMAC_ID_TX,
-#endif
-#if SERCOM_INST_NUM > 6
-    SERCOM6_DMAC_ID_TX, SERCOM7_DMAC_ID_TX,
 #endif
 };

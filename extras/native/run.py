@@ -24,12 +24,13 @@ result = subprocess.run(command, env=environment, text=True, capture_output=True
 if result.returncode:
     print(result.stdout+result.stderr)
     raise SystemExit(result.returncode)
-cases = ("finite_transfer", "never_begun", "invalid_pin", "active_destroy", "irq_restore", "allocation_failure", "descriptor_failure", "spi_failure", "buffer_failure_1", "buffer_failure_2", "borrowed_spi", "begin_twice", "channel_reuse", "callback_reuse")
+cases = ("spi_pipeline_required", "pending_frames", "completion_during_publish", "in_flight_buffer", "transfer_failure", "destroy_active", "never_begun", "invalid_pin", "spi_begin_failure", "buffer_failure_1", "buffer_failure_2", "borrowed_spi", "begin_twice", "repeated_lifetimes", "irq_restore")
 records = []
 for case in cases:
     result = subprocess.run([str(executable),case],env=environment,text=True,capture_output=True)
     print(result.stdout, end="")
     records.append(dict(case=case,exit_code=result.returncode,stdout=result.stdout,stderr=result.stderr))
 report = dict(command=command,source=str(source),sha256={name:hashlib.sha256((source/name).read_bytes()).hexdigest() for name in ("Adafruit_NeoPixel_ZeroDMA.cpp","Adafruit_NeoPixel_ZeroDMA.h")}, cases=records)
+(build/"source-contract.json").write_text(json.dumps({"forbidden": {name: token not in (source/name).read_text() for name, token in (("Adafruit_NeoPixel_ZeroDMA.h", "Adafruit_ZeroDMA"), ("Adafruit_NeoPixel_ZeroDMA.cpp", "Adafruit_ZeroDMA"), ("Adafruit_NeoPixel_ZeroDMA.cpp", "dma.setTrigger"))}}, indent=2)+"\n")
 (build/args.report).write_text(json.dumps(report,indent=2)+"\n")
 raise SystemExit(1 if any(r["exit_code"] for r in records) else 0)

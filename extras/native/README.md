@@ -1,7 +1,7 @@
 # NeoPixel lifecycle tests
 
 These host tests compile the checkout's actual `Adafruit_NeoPixel_ZeroDMA.cpp`
-through `lifecycle.cpp`. They replace Arduino, SPI and ZeroDMA with observable
+through `lifecycle.cpp`. They replace Arduino and SPI with observable
 fakes. No firmware source is copied or generated.
 
 Run from the library root using the SimIO Backend interpreter:
@@ -22,42 +22,31 @@ execute the same lifecycle cases.
 
 ## Behavior checked
 
-- A successful begin allocates without starting DMA. Show submits one finite
-  transfer; completion submits a pending frame and otherwise stops.
-- Destruction detaches the completion callback before aborting, releases the
-  allocated channel, balances a started SPI transaction, deletes owned SPI and
-  releases both frame buffers.
-- Destruction before begin or after invalid-pin rejection never aborts or frees
-  an unallocated channel.
-- Failed SPI begin, DMA allocation, descriptor allocation and either frame-buffer
-  allocation return false, release partial resources immediately and permit retry.
-- Borrowed SPI survives destruction. Repeated successful begin retains one
-  channel and two buffers.
-- Repeated object lifetimes reuse a deliberately small four-channel pool.
-- Removed callback owners ignore stale completions, while a new owner processes
-  its own pending frame. Cleanup restores the caller's interrupt mask.
+- A successful begin allocates two frame buffers without submitting SPI work.
+  Show queues a finite frame; completion submits the newest pending frame.
+- Destruction ends SPI before freeing an active source buffer.
+- Destruction before begin or after invalid-pin rejection releases nothing.
+- Failed SPI begin and either frame-buffer allocation release partial resources.
+- Borrowed SPI is not deleted. Repeated `begin()` calls retain one allocation.
+- Repeated active lifetimes cancel SPI before their frame buffers are released.
 
 For buffer accounting the production translation unit's `malloc` and `free`
-calls are redirected to tracked functions. The fake DMA release method is named
-`trackedFree` because the same function-like macro also rewrites `dma.free()`.
-It still models the public `free()` contract: busy channels reject release and
-an aborted channel removes its allocation owner. The fake invokes any remaining
-callback during abort so cleanup ordering is observable.
+calls are redirected to tracked functions. The SPI fake retains a submitted
+source pointer, supports partial reads, and invokes completion only when the
+test finishes that source.
 
 ## Evidence and limits
 
-`build/native-lifecycle/before.json` records the initial failing local-source
-reproduction. Its callback-reuse case selected a stale allocation-table pointer,
-so that single assertion is not valid evidence. The final test obtains each live
-object's actual DMA member instead. Channel leaks and exhaustion were reproduced
-independently in the active-destroy and repeated-lifetime cases.
+`spi-pipeline-before.json` records the required red assertion against the old
+implementation. It failed because `show()` did not submit through SPI.
 
-`native-before-compat-build.log` records the old local checkout failing to compile
-against native E54 register names. `legacy-after.json` and `native-after.json`
-record 14 passing behavioral cases each after lifecycle cleanup and the existing
-upstream register-name compatibility changes were integrated.
+The fakes do not reproduce physical SERCOM timing, queue contention, flash ECC,
+or the SAME54 cold-start fault. PlatformIO compilation and hardware acceptance
+remain separate requirements.
 
-The fakes do not reproduce hardware DMA timing, real SERCOM channel allocation,
-interrupt races, flash ECC, or the SAME54 cold-start fault. PlatformIO compilation
-and the original hardware acceptance remain separate requirements. The preexisting
-finite-transfer and double-buffer implementation is preserved by this change.
+## Pending-frame regression
+
+`pending_frames` submits A, B, and C before completing A. The newest pending
+frame C follows A. `completion_during_publish` completes A at the final masked
+publication boundary in `show(C)`. `in_flight_buffer` reads part of A before
+preparing B and C, then confirms SPI consumes A and C unchanged.
