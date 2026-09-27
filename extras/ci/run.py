@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 
-FRAMEWORK_SHA = "13f0abbd25515ae3984571836de1cbf7d2b08f7e"
+FRAMEWORK_SHA = "76492a7993f63a2c4687fcdeb5a57853a2272598"
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -32,7 +32,7 @@ def main():
     config = build / "platformio.ini"
     config.write_text(
         "[platformio]\n"
-        "default_envs = metro_m0, metro_m4\n"
+        "default_envs = metro_m0, metro_m4, metro_m0_irq, metro_m4_irq\n"
         "src_dir = ../../examples/strandtest\n"
         "\n[env]\n"
         "platform = atmelsam@8.3.0\n"
@@ -46,12 +46,17 @@ def main():
         "  adafruit/Adafruit NeoPixel@1.15.5\n"
         "build_flags =\n"
         "  -DARDUINO_SAMD_ADAFRUIT\n"
-        "  -DUSE_ZERODMA\n"
         "  -DUSE_TINYUSB\n"
         f"  -I{framework / 'libraries' / 'Adafruit_ZeroDMA'}\n"
         "\n[env:metro_m0]\n"
         "board = adafruit_metro_m0\n"
+        "build_flags = ${env.build_flags} -DUSE_ZERODMA\n"
         "\n[env:metro_m4]\n"
+        "board = adafruit_metro_m4\n"
+        "build_flags = ${env.build_flags} -DUSE_ZERODMA\n"
+        "\n[env:metro_m0_irq]\n"
+        "board = adafruit_metro_m0\n"
+        "\n[env:metro_m4_irq]\n"
         "board = adafruit_metro_m4\n"
     )
     run([sys.executable, "-m", "unittest", "discover", "-s", "extras"])
@@ -66,8 +71,9 @@ def main():
                 f"ci-native-{style}.json",
             ]
         )
-    run([args.pio, "run", "-d", str(build), "-e", "metro_m0"])
-    run([args.pio, "run", "-d", str(build), "-e", "metro_m4"])
+    for board in ("metro_m0", "metro_m4", "metro_m0_irq", "metro_m4_irq"):
+        run([args.pio, "run", "-d", str(build), "-e", board, "-t", "clean"])
+        run([args.pio, "run", "-d", str(build), "-e", board])
     sources = subprocess.check_output(
         [
             "git",

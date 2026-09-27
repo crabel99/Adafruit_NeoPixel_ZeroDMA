@@ -5,6 +5,9 @@ on: [pull_request, push, repository_dispatch]
 jobs:
   verify:
     runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: library
     
     steps:
     - uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d
@@ -13,11 +16,12 @@ jobs:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       with:
         fetch-depth: 2
+        path: library
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       with:
          repository: crabel99/SimIOFramework
-         ref: 13f0abbd25515ae3984571836de1cbf7d2b08f7e
-         path: .ci/SimIOFramework
+         ref: 76492a7993f63a2c4687fcdeb5a57853a2272598
+         path: framework
          submodules: recursive
 
     - name: Install PlatformIO
@@ -27,7 +31,7 @@ jobs:
         sudo apt-get install --yes doxygen
 
     - name: Verify native and SAMD builds
-      run: python extras/ci/run.py --framework .ci/SimIOFramework
+      run: python extras/ci/run.py --framework ../framework
 
     - name: Check patch formatting
       run: git diff --check HEAD~1

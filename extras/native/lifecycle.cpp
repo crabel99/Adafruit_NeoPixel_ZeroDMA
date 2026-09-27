@@ -35,7 +35,7 @@ void trackedFree(void *p) {
 #define malloc trackedMalloc
 #define free(...) FREE_DISPATCH(__VA_ARGS__)
 #define FREE_DISPATCH(...) trackedFree(__VA_ARGS__)
-#include "../../Adafruit_NeoPixel_ZeroDMA.cpp"
+#include "../../Adafruit_NeoPixel_SERCOM.cpp"
 #undef malloc
 #undef free
 SERCOM sercom0{0}, sercom1{1}, sercom2{2}, sercom3{3}, sercom4{4}, sercom5{5}, sercom6{6},
@@ -43,9 +43,9 @@ SERCOM sercom0{0}, sercom1{1}, sercom2{2}, sercom3{3}, sercom4{4}, sercom5{5}, s
 sercom_registers_t registers[8] = {};
 PinDescription g_APinDescription[PINS_COUNT] = {};
 SPIClass SPI(&sercom0, 9, 9, 9, SPI_PAD_0_SCK_1, SERCOM_RX_PAD_1);
-class InspectableStrip : public Adafruit_NeoPixel_ZeroDMA {
+class InspectableStrip : public Adafruit_NeoPixel_SERCOM {
 public:
-  using Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA;
+  using Adafruit_NeoPixel_SERCOM::Adafruit_NeoPixel_SERCOM;
   void frame(uint8_t value) {
     memset(pixels, value, numBytes);
     show();
@@ -58,7 +58,7 @@ void check(bool condition, const char *message) {
     std::cout << "FAIL " << message << '\n';
   }
 }
-bool initialize(Adafruit_NeoPixel_ZeroDMA &strip, uint8_t pin = 33) {
+bool initialize(Adafruit_NeoPixel_SERCOM &strip, uint8_t pin = 33) {
   return strip.begin(&sercom1, pin, SPI_PAD_0_SCK_1, PIO_SERCOM);
 }
 void completeSpi() {
@@ -160,13 +160,13 @@ int main(int argc, char **argv) {
     }
     check(observed::spiSource == nullptr, "destruction cancels SPI before buffers release");
   } else if (name == "never_begun") {
-    Adafruit_NeoPixel_ZeroDMA strip(1, 33);
+    Adafruit_NeoPixel_SERCOM strip(1, 33);
   } else if (name == "invalid_pin") {
-    Adafruit_NeoPixel_ZeroDMA strip(1, 33);
+    Adafruit_NeoPixel_SERCOM strip(1, 33);
     check(!initialize(strip, 32), "invalid pin rejected");
   } else if (name == "spi_begin_failure") {
     observed::spiBeginResult = false;
-    Adafruit_NeoPixel_ZeroDMA strip(1, 33);
+    Adafruit_NeoPixel_SERCOM strip(1, 33);
     check(!initialize(strip), "SPI begin failure propagates");
     check(observed::buffers.empty(), "failed SPI begin releases frame buffers");
     observed::spiBeginResult = true;
@@ -175,7 +175,7 @@ int main(int argc, char **argv) {
     completeSpi();
   } else if (name == "buffer_failure_1" || name == "buffer_failure_2") {
     observed::failMallocCall = name == "buffer_failure_1" ? 1 : 2;
-    Adafruit_NeoPixel_ZeroDMA strip(1, 33);
+    Adafruit_NeoPixel_SERCOM strip(1, 33);
     check(!initialize(strip), "buffer allocation failure propagates");
     check(observed::buffers.empty(), "partial frame allocation releases buffers");
     observed::failMallocCall = 0;
@@ -183,7 +183,7 @@ int main(int argc, char **argv) {
     strip.show();
     completeSpi();
   } else if (name == "borrowed_spi") {
-    Adafruit_NeoPixel_ZeroDMA strip(1, 9);
+    Adafruit_NeoPixel_SERCOM strip(1, 9);
     check(initialize(strip, 9), "borrowed SPI begins");
     strip.show();
     completeSpi();

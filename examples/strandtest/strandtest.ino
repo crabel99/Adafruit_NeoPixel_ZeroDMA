@@ -1,11 +1,12 @@
-// This is a PARED-DOWN NeoPixel example for the Adafruit_NeoPixel_ZeroDMA
+// This is a PARED-DOWN NeoPixel example for the Adafruit_NeoPixel_SERCOM
 // library, demonstrating pin declarations, etc.  For more complete examples
 // of NeoPixel operations, see the examples included with the 'regular'
 // Adafruit_NeoPixel library.
 
-// Also requires LATEST Adafruit_NeoPixel and Adafruit_ZeroDMA libraries.
+// Also requires LATEST Adafruit_NeoPixel and Adafruit_ZeroDMA libraries. SPI/SERCOM
+// selects DMA or non-DMA transport internally.
 
-#include <Adafruit_NeoPixel_ZeroDMA.h>
+#include <Adafruit_NeoPixel_SERCOM.h>
 
 /*
   This branch discovers SERCOM routes at runtime. A pin works if the board's
@@ -20,7 +21,7 @@
 #define PIN        12
 #define NUM_PIXELS 30
 
-Adafruit_NeoPixel_ZeroDMA strip(NUM_PIXELS, PIN, NEO_GRB);
+Adafruit_NeoPixel_SERCOM strip(NUM_PIXELS, PIN, NEO_GRB);
 
 void setup() {
   if (!strip.begin())

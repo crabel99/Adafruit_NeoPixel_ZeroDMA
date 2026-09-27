@@ -1,6 +1,6 @@
-PROJECT_NAME           = Adafruit_NeoPixel_ZeroDMA
+PROJECT_NAME           = Adafruit_NeoPixel_SERCOM
 OUTPUT_DIRECTORY       = build/doxygen
-INPUT                  = Adafruit_NeoPixel_ZeroDMA.h Adafruit_NeoPixel_ZeroDMA.cpp
+INPUT                  = Adafruit_NeoPixel_SERCOM.h Adafruit_NeoPixel_SERCOM.cpp
 RECURSIVE              = NO
 GENERATE_HTML          = YES
 GENERATE_LATEX         = NO

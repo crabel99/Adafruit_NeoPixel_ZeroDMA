@@ -31,7 +31,7 @@ Each strip requires its own SPI peripheral. Do not share that peripheral with
 other devices while the strip is active.
 */
 
-#include "Adafruit_NeoPixel_ZeroDMA.h"
+#include "Adafruit_NeoPixel_SERCOM.h"
 #include "bittable.h"       // Optional, see comments in show()
 #include "pins.h"           // Silicon-level pin routing tables
 #include "wiring_private.h" // pinPeripheral() function
@@ -41,8 +41,8 @@ other devices while the strip is active.
     @param p Pin to use (we will figure out what Sercom to use)
     @param t The color order / type of pixels
 */
-Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p, neoPixelType t)
-    : Adafruit_NeoPixel_ZeroDMA(n, p, t, false) {}
+Adafruit_NeoPixel_SERCOM::Adafruit_NeoPixel_SERCOM(uint16_t n, uint8_t p, neoPixelType t)
+    : Adafruit_NeoPixel_SERCOM(n, p, t, false) {}
 
 /** @brief Initialize a NeoPixel strand
     @param n Number of pixels
@@ -51,8 +51,8 @@ Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p, neoP
     @param altSercom If true, prefer ALT SERCOM variant; if false (default),
    prefer primary
 */
-Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p, neoPixelType t,
-                                                     bool altSercom)
+Adafruit_NeoPixel_SERCOM::Adafruit_NeoPixel_SERCOM(uint16_t n, uint8_t p, neoPixelType t,
+                                                   bool altSercom)
     : Adafruit_NeoPixel(n, p, t), spi(NULL), activeBuf(NULL), stagingBuf(NULL), brightness(256),
       _useAltSercom(altSercom), frameBytes(0), transferActive(false), refreshPending(false),
       stagingEncoding(false), ownsSpi(false) {}
@@ -65,14 +65,14 @@ Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p, neoP
   lifecycle around those changes. Using that workflow after begin() is not
   considered a supported path.
 */
-Adafruit_NeoPixel_ZeroDMA::Adafruit_NeoPixel_ZeroDMA(void)
+Adafruit_NeoPixel_SERCOM::Adafruit_NeoPixel_SERCOM(void)
     : Adafruit_NeoPixel(), spi(NULL), activeBuf(NULL), stagingBuf(NULL), brightness(256),
       _useAltSercom(false), frameBytes(0), transferActive(false), refreshPending(false),
       stagingEncoding(false), ownsSpi(false) {}
 
-Adafruit_NeoPixel_ZeroDMA::~Adafruit_NeoPixel_ZeroDMA() { releaseResources(); }
+Adafruit_NeoPixel_SERCOM::~Adafruit_NeoPixel_SERCOM() { releaseResources(); }
 
-void Adafruit_NeoPixel_ZeroDMA::releaseResources() {
+void Adafruit_NeoPixel_SERCOM::releaseResources() {
   if (spi != NULL)
     spi->end();
   transferActive = false;
@@ -89,11 +89,11 @@ void Adafruit_NeoPixel_ZeroDMA::releaseResources() {
   frameBytes = 0;
 }
 
-void Adafruit_NeoPixel_ZeroDMA::transferComplete(void *user, int status) {
-  static_cast<Adafruit_NeoPixel_ZeroDMA *>(user)->handleTransferComplete(status);
+void Adafruit_NeoPixel_SERCOM::transferComplete(void *user, int status) {
+  static_cast<Adafruit_NeoPixel_SERCOM *>(user)->handleTransferComplete(status);
 }
 
-void Adafruit_NeoPixel_ZeroDMA::handleTransferComplete(int status) {
+void Adafruit_NeoPixel_SERCOM::handleTransferComplete(int status) {
   transferActive = false;
   if (status != 0) {
     refreshPending = false;
@@ -119,8 +119,8 @@ void Adafruit_NeoPixel_ZeroDMA::handleTransferComplete(int status) {
 
     @returns true and populates all out-parameters on success.
 */
-bool Adafruit_NeoPixel_ZeroDMA::_setupSercomFromPin(SERCOM **outSercom, SercomSpiTXPad *outPadTX,
-                                                    EPioType *outPinFunc) {
+bool Adafruit_NeoPixel_SERCOM::_setupSercomFromPin(SERCOM **outSercom, SercomSpiTXPad *outPadTX,
+                                                   EPioType *outPinFunc) {
   if ((uint32_t)pin >= PINS_COUNT)
     return false;
 
@@ -174,8 +174,8 @@ bool Adafruit_NeoPixel_ZeroDMA::_setupSercomFromPin(SERCOM **outSercom, SercomSp
     @param pinFunc The pinmux setup for which 'type' of pinmux we use
     @returns True or false on success
 */
-bool Adafruit_NeoPixel_ZeroDMA::begin(SERCOM *sercom, uint8_t mosi, SercomSpiTXPad padTX,
-                                      EPioType pinFunc) {
+bool Adafruit_NeoPixel_SERCOM::begin(SERCOM *sercom, uint8_t mosi, SercomSpiTXPad padTX,
+                                     EPioType pinFunc) {
 
   if (mosi != pin)
     return false; // Invalid pin
@@ -262,7 +262,7 @@ bool Adafruit_NeoPixel_ZeroDMA::begin(SERCOM *sercom, uint8_t mosi, SercomSpiTXP
 
     @returns True on success, false otherwise
  */
-bool Adafruit_NeoPixel_ZeroDMA::begin(void) {
+bool Adafruit_NeoPixel_SERCOM::begin(void) {
   SERCOM *sercom = nullptr;
   SercomSpiTXPad padTX = SPI_PAD_0_SCK_1;
   EPioType pinFunc = PIO_SERCOM;
@@ -277,7 +277,7 @@ bool Adafruit_NeoPixel_ZeroDMA::begin(void) {
 
 /** @brief Convert the NeoPixel buffer to a queued SPI frame
  */
-void Adafruit_NeoPixel_ZeroDMA::encodeInto(uint8_t *buffer) {
+void Adafruit_NeoPixel_SERCOM::encodeInto(uint8_t *buffer) {
   if (buffer == NULL)
     return;
 
@@ -314,7 +314,7 @@ void Adafruit_NeoPixel_ZeroDMA::encodeInto(uint8_t *buffer) {
 #endif
 }
 
-bool Adafruit_NeoPixel_ZeroDMA::startTransfer(uint8_t *buffer) {
+bool Adafruit_NeoPixel_SERCOM::startTransfer(uint8_t *buffer) {
   if (buffer == NULL || spi == NULL)
     return false;
   transferActive = true;
@@ -323,7 +323,7 @@ bool Adafruit_NeoPixel_ZeroDMA::startTransfer(uint8_t *buffer) {
 }
 
 /** @brief Encode the latest pixels and submit one finite SPI transfer. */
-void Adafruit_NeoPixel_ZeroDMA::show(void) {
+void Adafruit_NeoPixel_SERCOM::show(void) {
   if (activeBuf == NULL || stagingBuf == NULL)
     return;
 
@@ -354,12 +354,12 @@ void Adafruit_NeoPixel_ZeroDMA::show(void) {
     256 (brightest), requiring a 16-bit value.
     @param b 0 - 255 brightness value
 */
-void Adafruit_NeoPixel_ZeroDMA::setBrightness(uint8_t b) {
+void Adafruit_NeoPixel_SERCOM::setBrightness(uint8_t b) {
   brightness = (uint16_t)b + 1; // 0-255 in, 1-256 out
 }
 
 /** @brief The brightness, back adjusted to 0-255 standard expectation
     @returns 0 for off, 255 for max brightness */
-uint8_t Adafruit_NeoPixel_ZeroDMA::getBrightness(void) const {
+uint8_t Adafruit_NeoPixel_SERCOM::getBrightness(void) const {
   return brightness - 1; // 1-256 in, 0-255 out
 }

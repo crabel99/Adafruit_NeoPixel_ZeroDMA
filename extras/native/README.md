@@ -1,6 +1,6 @@
 # NeoPixel lifecycle tests
 
-These host tests compile the checkout's actual `Adafruit_NeoPixel_ZeroDMA.cpp`
+These host tests compile the checkout's actual `Adafruit_NeoPixel_SERCOM.cpp`
 through `lifecycle.cpp`. They replace Arduino and SPI with observable
 fakes. No firmware source is copied or generated.
 

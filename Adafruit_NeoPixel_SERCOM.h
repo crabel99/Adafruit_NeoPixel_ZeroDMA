@@ -1,5 +1,5 @@
-#ifndef _ADAFRUIT_NEOPIXEL_ZERODMA_H_
-#define _ADAFRUIT_NEOPIXEL_ZERODMA_H_
+#ifndef _ADAFRUIT_NEOPIXEL_SERCOM_H_
+#define _ADAFRUIT_NEOPIXEL_SERCOM_H_
 
 #include <Adafruit_NeoPixel.h>
 #include <SPI.h>
@@ -13,14 +13,14 @@ typedef SPIClass SPIClassSAMD;
 
 /** @brief Create a NeoPixel class that uses queued SPI to write strands in
     a non-blocking manner */
-class Adafruit_NeoPixel_ZeroDMA : public Adafruit_NeoPixel {
+class Adafruit_NeoPixel_SERCOM : public Adafruit_NeoPixel {
 
 public:
-  Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p = 6, neoPixelType t = NEO_GRB);
+  Adafruit_NeoPixel_SERCOM(uint16_t n, uint8_t p = 6, neoPixelType t = NEO_GRB);
   // Uses NeoPixel default color order (NEO_GRB).
-  Adafruit_NeoPixel_ZeroDMA(uint16_t n, uint8_t p, neoPixelType t, bool altSercom);
-  Adafruit_NeoPixel_ZeroDMA(void);
-  ~Adafruit_NeoPixel_ZeroDMA();
+  Adafruit_NeoPixel_SERCOM(uint16_t n, uint8_t p, neoPixelType t, bool altSercom);
+  Adafruit_NeoPixel_SERCOM(void);
+  ~Adafruit_NeoPixel_SERCOM();
 
   bool begin(void);
   bool begin(SERCOM *sercom, uint8_t mosi, SercomSpiTXPad padTX, EPioType pinFunc);
@@ -54,4 +54,4 @@ private:
   bool _setupSercomFromPin(SERCOM **outSercom, SercomSpiTXPad *outPadTX, EPioType *outPinFunc);
 };
 
-#endif // _ADAFRUIT_NEOPIXEL_ZERODMA_H_
+#endif // _ADAFRUIT_NEOPIXEL_SERCOM_H_

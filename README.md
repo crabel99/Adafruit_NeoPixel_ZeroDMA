@@ -1,10 +1,17 @@
-# Adafruit_NeoPixel_ZeroDMA
+# Adafruit_NeoPixel_SERCOM
 
 Queued-SPI NeoPixel library for SAMD21, SAMD51, and SAME5x microcontrollers.
 Frames are encoded into a staging buffer and submitted through the core SPI
 queue. The active frame stays unchanged until its completion callback.
 
-Requires Adafruit_NeoPixel and the SimIO queued SPI/SERCOM implementation.
+Requires Adafruit_NeoPixel and Adafruit Zero DMA Library. SPI/SERCOM selects
+DMA or non-DMA transport internally; this library does not select or manage DMA.
+The core must provide the completion-callback SPI API proposed in
+[ArduinoCore-samd #395](https://github.com/adafruit/ArduinoCore-samd/pull/395).
+Stock cores without that API are not supported.
+
+Include `<Adafruit_NeoPixel_SERCOM.h>` and construct an
+`Adafruit_NeoPixel_SERCOM` object. The repository URL retains its original name.
 
 THIS ONLY WORKS ON CERTAIN PINS. THIS IS NORMAL.
 
@@ -33,13 +40,14 @@ object. What is not supported as a drop-in workflow is changing those values
 after `begin()` has initialized SPI resources.
 
 If your project needs configurable strip settings, construct a new
-Adafruit_NeoPixel_ZeroDMA instance with the desired values before calling
+Adafruit_NeoPixel_SERCOM instance with the desired values before calling
 `begin()`.
 
 ## Verification
 
 CI runs the Python and native lifecycle checks and compiles `strandtest` for
-Adafruit Metro M0 and Metro M4 against the pinned SimIOFramework revision.
+Adafruit Metro M0 and Metro M4 with both DMA and interrupt-driven SPI against
+the pinned Framework PR revision.
 It also checks C++ formatting with clang-format 18.1.8 and generates Doxygen
 output in `build/doxygen`.
 
