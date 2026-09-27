@@ -324,4 +324,3 @@ SERCOM_PIN(2, 11, 7, 3, 3) // PC11D
 // SAMD5x/E5x 120/128-pin extra routes
 #if SAMD5X_E5X_120_SERIES
 #endif
-

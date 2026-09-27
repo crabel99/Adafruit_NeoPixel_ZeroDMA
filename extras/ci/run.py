@@ -16,10 +16,12 @@ def run(command, cwd=ROOT):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--framework", required=True, type=Path)
+    parser.add_argument("--base-ref", required=True)
     parser.add_argument("--pio", default="pio")
     parser.add_argument("--clang-format", default="clang-format")
     parser.add_argument("--doxygen", default="doxygen")
     args = parser.parse_args()
+    run(["git", "diff", "--check", args.base_ref])
     framework = args.framework.resolve()
     actual = subprocess.check_output(
         ["git", "-C", str(framework), "rev-parse", "HEAD"], text=True
@@ -32,6 +34,7 @@ def main():
     config = build / "platformio.ini"
     config.write_text(
         "[platformio]\n"
+        "packages_dir = packages\n"
         "default_envs = metro_m0, metro_m4, metro_m0_irq, metro_m4_irq\n"
         "src_dir = ../../examples/strandtest\n"
         "\n[env]\n"

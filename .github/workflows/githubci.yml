@@ -31,7 +31,4 @@ jobs:
         sudo apt-get install --yes doxygen graphviz
 
     - name: Verify native and SAMD builds
-      run: python extras/ci/run.py --framework ../framework
-
-    - name: Check patch formatting
-      run: git diff --check HEAD~1
+      run: python extras/ci/run.py --framework ../framework --base-ref HEAD^

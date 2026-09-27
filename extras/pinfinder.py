@@ -319,7 +319,6 @@ def generate_include() -> str:
         )
     )
 
-    lines.append("")
     return "\n".join(lines)
 
 

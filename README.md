@@ -51,7 +51,10 @@ the pinned Framework PR revision.
 It also checks C++ formatting with clang-format 18.1.8 and generates Doxygen
 output in `build/doxygen`.
 
-Run the same checks locally with `python extras/ci/run.py --framework <checkout>`.
+Run the same checks locally with
+`python extras/ci/run.py --framework <checkout> --base-ref upstream/master`.
+The base reference must identify the target branch of the pull request so the
+whitespace check covers the whole proposed change.
 The checkout must be at the revision recorded by the script. PlatformIO 6.1.19,
-clang-format 18.1.8, and Doxygen must be available on the command path; the script
+clang-format 18.1.8, Doxygen, and Graphviz must be available on the command path; the script
 also accepts explicit `--pio`, `--clang-format`, and `--doxygen` paths.
