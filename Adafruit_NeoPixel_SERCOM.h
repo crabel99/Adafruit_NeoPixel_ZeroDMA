@@ -46,6 +46,8 @@ private:
   volatile bool refreshPending;
   volatile bool stagingEncoding;
   bool ownsSpi;
+  EPioType outputPinFunc;
+  void holdDataLow();
   void releaseResources();
   static void transferComplete(void *user, int status);
   void handleTransferComplete(int status);

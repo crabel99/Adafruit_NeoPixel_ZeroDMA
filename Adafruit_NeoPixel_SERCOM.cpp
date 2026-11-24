@@ -93,7 +93,13 @@ void Adafruit_NeoPixel_SERCOM::transferComplete(void *user, int status) {
   static_cast<Adafruit_NeoPixel_SERCOM *>(user)->handleTransferComplete(status);
 }
 
+void Adafruit_NeoPixel_SERCOM::holdDataLow() {
+  digitalWrite(pin, LOW);
+  pinMode(pin, OUTPUT);
+}
+
 void Adafruit_NeoPixel_SERCOM::handleTransferComplete(int status) {
+  holdDataLow();
   transferActive = false;
   if (status != 0) {
     refreshPending = false;
@@ -190,11 +196,12 @@ bool Adafruit_NeoPixel_SERCOM::begin(SERCOM *sercom, uint8_t mosi, SercomSpiTXPa
   // 3:1 to allow use of SPI peripheral to generate NeoPixel-like timing
   // (0b100 for a zero bit, 0b110 for a one bit).  SPI is clocked at
   // 2.4 MHz, the 3:1 sizing then creates NeoPixel-like 800 KHz bitrate.
-  // The final 90 zero bytes hold the data line low for 300 microseconds at
-  // 2.4 MHz, satisfying the reset/latch interval before completion.
+  // Each finite transfer starts with 300us LOW to clear the pulse from
+  // reattaching idle-high SPI, and ends with 300us LOW to latch the color.
+  // Completion hands the pin to GPIO LOW without continuously refreshing.
 
   uint8_t bytesPerPixel = (wOffset == rOffset) ? 3 : 4;
-  frameBytes = (numLEDs * bytesPerPixel * 8 * 3 + 7) / 8 + 90;
+  frameBytes = (numLEDs * bytesPerPixel * 8 * 3 + 7) / 8 + 180;
   activeBuf = (uint8_t *)malloc(frameBytes);
   stagingBuf = (uint8_t *)malloc(frameBytes);
   if (!activeBuf || !stagingBuf) {
@@ -247,11 +254,13 @@ bool Adafruit_NeoPixel_SERCOM::begin(SERCOM *sercom, uint8_t mosi, SercomSpiTXPa
     releaseResources();
     return false;
   }
+  outputPinFunc = pinFunc;
   pinPeripheral(mosi, pinFunc);
   spi->beginTransaction(SPISettings(2400000, MSBFIRST, SPI_MODE0));
   spi->endTransaction();
   memset(activeBuf, 0, frameBytes);
   memset(stagingBuf, 0, frameBytes);
+  holdDataLow();
   return true;
 }
 
@@ -281,13 +290,13 @@ void Adafruit_NeoPixel_SERCOM::encodeInto(uint8_t *buffer) {
   if (buffer == NULL)
     return;
 
-    // Expand 8 bits 'abcdefgh' to 24 bits '1a01b01c01d01e01f01g01h0'
+  // Expand 8 bits 'abcdefgh' to 24 bits '1a01b01c01d01e01f01g01h0'
 #ifdef _BITTABLE_H_
   // If bittable.h is included, 3:1 bit expansion is handled using a table
   // lookup -- each byte of input (from NeoPixel buffer) is replaced with
   // three bytes output in the encoded frame. This is about twice
   // as quick as math below but the table requires about 1KB of code space.
-  uint8_t *in = pixels, *out = buffer;
+  uint8_t *in = pixels, *out = buffer + 90;
   uint32_t expanded;
   for (uint16_t p = numBytes; p--;) {
     expanded = bitExpand[(*in++ * brightness) >> 8];
@@ -298,7 +307,7 @@ void Adafruit_NeoPixel_SERCOM::encodeInto(uint8_t *buffer) {
 #else
   // If bittable.h is NOT included, 3:1 bit expansion is done on the fly.
   // More complex, but smaller executable.
-  uint8_t *in = pixels, *out = buffer, i, abef, cdgh;
+  uint8_t *in = pixels, *out = buffer + 90, i, abef, cdgh;
   uint32_t expanded;
   for (uint16_t p = numBytes; p--;) {
     cdgh = (*in++ * brightness) >> 8;
@@ -318,6 +327,7 @@ bool Adafruit_NeoPixel_SERCOM::startTransfer(uint8_t *buffer) {
   if (buffer == NULL || spi == NULL)
     return false;
   transferActive = true;
+  pinPeripheral(pin, outputPinFunc);
   spi->transfer(buffer, NULL, frameBytes, false, transferComplete, this);
   return transferActive;
 }
