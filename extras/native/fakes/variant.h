@@ -95,3 +95,11 @@ inline void __set_PRIMASK(uint32_t value) { observed::primask = value; }
 namespace observed {
 extern unsigned transactionEnds, activeTransactions;
 }
+
+constexpr uint32_t OUTPUT = 1, LOW = 0;
+namespace observed {
+extern bool pinOnSpi;
+extern uint32_t pinLevel;
+} // namespace observed
+inline void digitalWrite(uint32_t, uint32_t level) { observed::pinLevel = level; }
+inline void pinMode(uint32_t, uint32_t) { observed::pinOnSpi = false; }

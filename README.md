@@ -26,7 +26,7 @@ for other devices.
 OTHER THINGS TO KNOW:
 
 Queued SPI NeoPixels use 21 bytes per RGB pixel or 28 bytes per RGBW pixel,
-plus 180 reset bytes. The base pixel buffer and two expanded frame buffers are
+plus 360 reset bytes. The base pixel buffer and two expanded frame buffers are
 kept at the same time.
 
 0/1 bit timing does not precisely match NeoPixel/WS2812/SK6812 datasheet
@@ -34,6 +34,10 @@ specs, but it seems to work well enough. Use at your own peril.
 
 The selected SPI peripheral is dedicated to the strip. Calls to `show()`
 coalesce while a frame is active, so the newest pending frame follows it.
+Each finite frame includes 300 microseconds LOW before and after the pixel data.
+The leading reset clears the pulse caused by reconnecting idle-high SPI.
+After completion the pin is held LOW as a GPIO output, with no continuous
+refresh transfers.
 
 Length/pin/type can be provided at run time when constructing the strip
 object. What is not supported as a drop-in workflow is changing those values

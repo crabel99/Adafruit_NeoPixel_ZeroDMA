@@ -1,9 +1,12 @@
 #include <iostream>
+#include <algorithm>
 #include <string>
 #include <unordered_set>
 #include "Adafruit_NeoPixel.h"
 #include "SPI.h"
 namespace observed {
+bool pinOnSpi = false;
+uint32_t pinLevel = 1;
 uint32_t primask = 0;
 void (*beforeMaskRead)() = nullptr;
 bool spiBeginResult = true;
@@ -94,8 +97,8 @@ void advanceSpi(size_t count) {
   }
 }
 std::vector<uint8_t> expectedFrame(uint8_t first, uint8_t second, uint8_t third) {
-  std::vector<uint8_t> frame(99, 0);
-  for (size_t i = 0; i < 9; i += 3) {
+  std::vector<uint8_t> frame(189, 0);
+  for (size_t i = 90; i < 99; i += 3) {
     frame[i] = first;
     frame[i + 1] = second;
     frame[i + 2] = third;
@@ -114,7 +117,30 @@ int main(int argc, char **argv) {
     return 2;
   std::string name = argv[1];
   auto constructed = observed::spiConstructed, destroyed = observed::spiDestroyed;
-  if (name == "spi_pipeline_required") {
+  if (name == "idle_low" || name == "restart_reset") {
+    InspectableStrip strip(1, 33);
+    check(initialize(strip), "begin succeeds");
+    if (name == "idle_low") {
+      check(!observed::pinOnSpi && observed::pinLevel == LOW,
+            "begin leaves data LOW without a DMA transfer");
+      strip.frame(0);
+      check(observed::pinOnSpi, "update routes data through SPI");
+      completeSpi();
+      check(!observed::pinOnSpi && observed::pinLevel == LOW, "completion leaves data LOW");
+      check(observed::spiSource == nullptr, "idle has no active DMA transfer");
+      strip.frame(255);
+      completeSpi();
+      check(!observed::pinOnSpi && observed::pinLevel == LOW, "second update returns data LOW");
+    } else {
+      strip.frame(255);
+      const auto &frame = observed::spiSubmitted.back();
+      check(frame.size() == 189, "finite update contains reset before and after color data");
+      check(frame.size() >= 90 &&
+                std::all_of(frame.begin(), frame.begin() + 90, [](uint8_t b) { return b == 0; }),
+            "SPI reattachment glitch is followed by 300us LOW before color data");
+      completeSpi();
+    }
+  } else if (name == "spi_pipeline_required") {
     InspectableStrip strip(1, 33);
     check(initialize(strip), "begin succeeds");
     strip.show();

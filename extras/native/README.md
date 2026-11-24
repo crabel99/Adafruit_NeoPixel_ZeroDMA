@@ -50,3 +50,15 @@ remain separate requirements.
 frame C follows A. `completion_during_publish` completes A at the final masked
 publication boundary in `show(C)`. `in_flight_buffer` reads part of A before
 preparing B and C, then confirms SPI consumes A and C unchanged.
+
+## Finite updates with LOW idle
+
+`idle_low` checks GPIO LOW after begin and after two completed updates,
+with no queued transfer while idle. `restart_reset` checks the 300 microsecond
+LOW prefix that clears the idle-high SPI handoff pulse before color data.
+`idle-low-before.json` records both cases failing against the previous driver.
+
+Hardware acceptance on a RedBoard Turbo with one RGB pixel on D2 confirmed
+steady red after black, using finite DMA updates. Pad readback after completion
+was LOW with PMUX disabled. These observations validate the D2 case; the native
+fakes do not measure physical transition timing.
